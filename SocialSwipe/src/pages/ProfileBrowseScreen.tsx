@@ -5,20 +5,19 @@ import {
     Text,
     StyleSheet,
     ActivityIndicator,
-    SafeAreaView,
+    SafeAreaView, // We'll use this for content padding inside the gradient
     Alert,
-    Pressable, // Keep Pressable for buttons like "Try Again", "Refresh"
+    Pressable,
     Dimensions,
 } from 'react-native';
-import { supabase } from '../lib/supabaseClient'; // CHECK PATH: Relative to this file
-import { useApp } from '../../App'; // CHECK PATH: Relative to this file
+import { LinearGradient } from 'expo-linear-gradient'; // Ensure this is installed
+import { supabase } from '../lib/supabaseClient';
+import { useApp } from '../../App';
 
-// Import ProfileCard and its Profile interface
-import ProfileCard, { Profile } from '../components/ProfileCard'; // Assuming ProfileCard.tsx is in src/components/
+import ProfileCard, { Profile } from '../components/ProfileCard';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
-// Define the raw data structure fetched from Supabase
 interface FetchedUserProfileData {
     user_id: string;
     first_name: string;
@@ -43,19 +42,13 @@ export default function ProfileBrowseScreen() {
     const [error, setError] = useState<string | null>(null);
 
     const getPublicImageUrl = useCallback((pathOrUrl: string | null | undefined): string | null => {
-        if (!pathOrUrl) {
-            return null;
-        }
-        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
-            return pathOrUrl;
-        }
+        if (!pathOrUrl) return null;
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) return pathOrUrl;
         try {
-            const { data } = supabase.storage
-                .from('profile_pictures')
-                .getPublicUrl(pathOrUrl);
+            const { data } = supabase.storage.from('profile_pictures').getPublicUrl(pathOrUrl);
             return data?.publicUrl ?? null;
         } catch (err) {
-            console.error(`getPublicImageUrl: Error getting public URL for path "${pathOrUrl}":`, err);
+            console.error(`getPublicImageUrl: Error for path "${pathOrUrl}":`, err);
             return null;
         }
     }, []);
@@ -73,10 +66,7 @@ export default function ProfileBrowseScreen() {
                 .neq('user_id', user.id)
                 .limit(50);
 
-            if (fetchError) {
-                console.error("Error fetching profiles:", fetchError);
-                throw fetchError;
-            }
+            if (fetchError) throw fetchError;
 
             if (data && data.length > 0) {
                 console.log(`Workspaceed ${data.length} raw profiles.`);
@@ -86,12 +76,6 @@ export default function ProfileBrowseScreen() {
                         const publicUrlsPromises = profilePicturesValues.map(pathOrUrl => getPublicImageUrl(pathOrUrl));
                         const resolvedUrls = await Promise.all(publicUrlsPromises);
                         const validPublicUrls = resolvedUrls.filter(url => url !== null) as string[];
-                        
-                        if (profilePicturesValues.length > 0 && validPublicUrls.length === 0) {
-                            console.warn(`Could not get public URLs for any paths/URLs in profile ${rawProfile.user_id}: ${profilePicturesValues.join(', ')}`);
-                        } else if (profilePicturesValues.length > 0 && validPublicUrls.length < profilePicturesValues.length) {
-                            console.warn(`Could not get public URLs for some paths/URLs in profile ${rawProfile.user_id}.`);
-                        }
                         
                         return {
                             id: rawProfile.user_id,
@@ -111,14 +95,12 @@ export default function ProfileBrowseScreen() {
                 );
                 setProfiles(transformedProfiles);
                 setCurrentIndex(0);
-                console.log(`Transformed ${transformedProfiles.length} profiles.`);
             } else {
-                console.log("No profiles data received or data array is empty.");
                 setProfiles([]);
                 setCurrentIndex(0);
             }
         } catch (err: any) {
-            console.error("Catch block error fetching profiles:", err);
+            console.error("Error fetching profiles:", err.message);
             setError(err.message || "Failed to fetch profiles.");
             setProfiles([]);
             setCurrentIndex(0);
@@ -128,11 +110,8 @@ export default function ProfileBrowseScreen() {
     }, [user, getPublicImageUrl]);
 
     useEffect(() => {
-        if (user) {
-            console.log("User found, fetching profiles...");
-            fetchProfiles();
-        } else {
-            console.log("User not available yet.");
+        if (user) fetchProfiles();
+        else {
             setProfiles([]);
             setCurrentIndex(0);
             setLoading(false);
@@ -140,56 +119,34 @@ export default function ProfileBrowseScreen() {
         }
     }, [user, fetchProfiles]);
 
-    const goToNextProfile = useCallback(() => {
-        setCurrentIndex(prevIndex => {
-            if (prevIndex < profiles.length - 1) {
-                return prevIndex + 1;
-            }
-            return prevIndex;
-        });
-    }, [profiles.length]);
-
-    const goToPrevProfile = useCallback(() => {
-        setCurrentIndex(prevIndex => {
-            if (prevIndex > 0) {
-                return prevIndex - 1;
-            }
-            return prevIndex;
-        });
-    }, []);
+    const goToNextProfile = useCallback(() => setCurrentIndex(prev => Math.min(prev + 1, profiles.length - 1)), [profiles.length]);
+    const goToPrevProfile = useCallback(() => setCurrentIndex(prev => Math.max(prev - 1, 0)), []);
 
     const handleLikeProfile = useCallback(async (likedProfileId: string) => {
-        if (!user) {
-            Alert.alert("Login Required", "Please log in to like profiles.");
-            return;
-        }
-        console.log(`User ${user.id} liked profile ${likedProfileId}`);
+        if (!user) { Alert.alert("Login Required", "Please log in to like profiles."); return; }
         try {
-            const { error: likeError } = await supabase.from('profile_likes').insert({
-                liker_user_id: user.id,
-                liked_profile_id: likedProfileId, 
-            });
+            const { error: likeError } = await supabase.from('profile_likes').insert({ liker_user_id: user.id, liked_profile_id: likedProfileId });
             if (likeError) throw likeError;
             Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
         } catch (err: any) {
-            console.error("Error liking profile:", err);
-            Alert.alert("Error", err.message || "Could not record your like. Please try again.");
+            console.error("Error liking profile:", err.message);
+            Alert.alert("Error", err.message || "Could not record like.");
         }
     }, [user, profiles]);
 
+    // Conditional returns for login, loading, error, no profiles (these do not use the gradient)
     if (!user && !loading) {
         return (
-            <SafeAreaView style={styles.safeArea}>
+            <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <Text style={styles.infoText}>Please log in to browse profiles.</Text>
                 </View>
             </SafeAreaView>
         );
     }
-    
     if (loading) {
         return (
-            <SafeAreaView style={styles.safeArea}>
+            <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <ActivityIndicator size="large" color="#FF6347" />
                     <Text style={styles.loadingText}>Finding profiles...</Text>
@@ -197,28 +154,22 @@ export default function ProfileBrowseScreen() {
             </SafeAreaView>
         );
     }
-
     if (error) {
         return (
-            <SafeAreaView style={styles.safeArea}>
+            <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <Text style={styles.errorText}>{error}</Text>
-                    <Pressable onPress={fetchProfiles} style={styles.button}>
-                        <Text style={styles.buttonText}>Try Again</Text>
-                    </Pressable>
+                    <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Try Again</Text></Pressable>
                 </View>
             </SafeAreaView>
         );
     }
-
-    if (profiles.length === 0) {
+    if (profiles.length === 0 && user) {
         return (
-            <SafeAreaView style={styles.safeArea}>
+            <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <Text style={styles.infoText}>No other profiles found yet. Check back soon!</Text>
-                     <Pressable onPress={fetchProfiles} style={styles.button}>
-                        <Text style={styles.buttonText}>Refresh</Text>
-                    </Pressable>
+                    <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
                 </View>
             </SafeAreaView>
         );
@@ -226,65 +177,67 @@ export default function ProfileBrowseScreen() {
 
     const currentProfile = profiles[currentIndex];
 
+    // Main return with Gradient Background
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <View style={styles.storyContainer}>
-                {/* Progress Bars for overall profile Browse */}
-                <View style={styles.progressBarsContainer}>
-                    {profiles.map((_, index) => (
-                        <View
-                            key={`progress-${index}`}
-                            style={[
-                                styles.progressBarSegment,
-                                index === currentIndex ? styles.progressBarSegmentActive : styles.progressBarSegmentInactive,
-                            ]}
-                        />
-                    ))}
-                </View>
-
-                {/* Profile Card Display */}
-                {currentProfile ? (
-                    <ProfileCard
-                        profile={currentProfile}
-                        onLike={handleLikeProfile} 
-                        isVisible={true} 
-                        // ---- NEW PROPS FOR ProfileCard ----
-                        // ProfileCard needs to implement its own tap handling for image navigation
-                        // and then call these functions to navigate between profiles when appropriate
-                        // (e.g., at the first/last image of the current profile).
-                        onRequestNextProfile={goToNextProfile}
-                        onRequestPrevProfile={goToPrevProfile}
-                    />
-                ) : (
-                    <View style={styles.centeredMessageContainer}> 
-                        <Text style={styles.infoText}>Loading profile...</Text>
+        <LinearGradient
+            colors={['#FF6B6B', '#FFD166']} // Example: Dark slate to very dark gray (Left to Right)
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles.gradientFullScreen} // Gradient covers the entire screen
+        >
+            <SafeAreaView style={styles.safeAreaWithGradientContent}> {/* SafeArea for content padding */}
+                <View style={styles.storyContainer}> {/* This View now just handles layout inside SafeArea */}
+                    <View style={styles.progressBarsContainer}>
+                        {profiles.map((_, index) => (
+                            <View
+                                key={`progress-${index}`}
+                                style={[
+                                    styles.progressBarSegment,
+                                    index === currentIndex ? styles.progressBarSegmentActive : styles.progressBarSegmentInactive,
+                                ]}
+                            />
+                        ))}
                     </View>
-                )}
 
-                {/* The large Pressable tapAreaLeft and tapAreaRight have been REMOVED from here.
-                    The ProfileCard component should now be responsible for:
-                    1. Handling taps to navigate its own internal images (if multiple exist).
-                       This includes rendering its own "arrows" or tap zones for image navigation.
-                    2. Calling `onRequestNextProfile` or `onRequestPrevProfile` when a tap
-                       (e.g., on the edge of the card or a specific arrow) indicates that
-                       navigation should proceed to the next or previous user profile, typically
-                       after exhausting the current profile's images or from the first image.
-                */}
-            </View>
-        </SafeAreaView>
+                    {currentProfile ? (
+                        <ProfileCard
+                            profile={currentProfile}
+                            onLike={handleLikeProfile} 
+                            isVisible={true} 
+                            onRequestNextProfile={goToNextProfile}
+                            onRequestPrevProfile={goToPrevProfile}
+                        />
+                    ) : (
+                        !loading && (
+                            <View style={styles.centeredMessageContainer}> 
+                                <Text style={styles.infoText}>No profile to display.</Text>
+                            </View>
+                        )
+                    )}
+                </View>
+            </SafeAreaView>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
+    gradientFullScreen: { // Style for the LinearGradient root component
         flex: 1,
-        backgroundColor: '#1c1c1e', 
     },
-    storyContainer: {
+    safeAreaWithGradientContent: { // SafeAreaView *inside* the gradient
+        flex: 1,
+        backgroundColor: 'transparent', // Crucial: allows gradient to show through
+    },
+    safeAreaSolidBackground: { // For loading/error/login states (NO GRADIENT)
+        flex: 1,
+        backgroundColor: '#1c1c1e', // Original dark background
+    },
+    storyContainer: { // This View is inside SafeAreaView, used for centering content
         flex: 1,
         justifyContent: 'center', 
         alignItems: 'center', 
         position: 'relative', 
+        // No background color needed here; it sits on the gradient via transparent SafeAreaView
     },
     centeredMessageContainer: {
         flex: 1,
@@ -306,7 +259,7 @@ const styles = StyleSheet.create({
     infoText: {
         textAlign: 'center',
         fontSize: 16,
-        color: '#d3d3d3', 
+        color: '#d3d3d3',
         paddingHorizontal: 20,
         marginBottom: 20,
     },
@@ -324,13 +277,14 @@ const styles = StyleSheet.create({
     },
     progressBarsContainer: {
         position: 'absolute',
-        top: 10, 
+        top: 0, // Positioned at the top of the storyContainer (which is inside safe area)
         left: 10,
         right: 10,
         flexDirection: 'row',
         height: 3,
-        zIndex: 10, // Ensure it's above the ProfileCard if ProfileCard is full screen
+        zIndex: 10, 
         gap: 4, 
+        paddingTop: 10, // Add some padding if status bar is transparent
     },
     progressBarSegment: {
         flex: 1,
@@ -343,24 +297,4 @@ const styles = StyleSheet.create({
     progressBarSegmentInactive: {
         backgroundColor: 'rgba(255, 255, 255, 0.4)',
     },
-    // The styles for `tapAreaLeft` and `tapAreaRight` are no longer used by Pressables
-    // in this component. You can remove them if they are not used elsewhere.
-    /*
-    tapAreaLeft: {
-        position: 'absolute',
-        left: 0,
-        top: 0, 
-        bottom: 0,
-        width: '30%', 
-        zIndex: 5, 
-    },
-    tapAreaRight: {
-        position: 'absolute',
-        right: 0,
-        top: 0,
-        bottom: 0,
-        width: '70%', 
-        zIndex: 5,
-    },
-    */
 });
