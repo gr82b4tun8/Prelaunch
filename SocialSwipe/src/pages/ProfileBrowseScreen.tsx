@@ -1,232 +1,385 @@
 // screens/ProfileBrowseScreen.tsx
-import React, { useEffect, useState, useCallback } from 'react'; // Added useCallback
-import { View, Text, StyleSheet, FlatList, Image, ActivityIndicator, SafeAreaView, Alert } from 'react-native';
+import React, { useEffect, useState, useCallback } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ActivityIndicator,
+    SafeAreaView,
+    Alert,
+    Pressable,
+    Dimensions,
+} from 'react-native';
 import { supabase } from '../lib/supabaseClient'; // CHECK PATH: Relative to this file
-import { useApp } from '../../App'; // CHECK PATH: Relative to this file - Is App.tsx in src/ or root? Should it be '../../App'? Does it export useApp?
+import { useApp } from '../../App'; // CHECK PATH: Relative to this file
 
-interface ProfileItem {
+// Import ProfileCard and its Profile interface
+import ProfileCard, { Profile } from '../components/ProfileCard'; // Assuming ProfileCard.tsx is in src/components/
+
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+
+// Define the raw data structure fetched from Supabase
+interface FetchedUserProfileData {
     user_id: string;
     first_name: string;
-    profile_pictures: string[] | null; // Array of storage paths
-    // Add other fields if needed for display
+    last_name?: string | null;
+    date_of_birth: string; // Assuming this is a string like 'YYYY-MM-DD'
+    gender: string;
+    bio?: string | null;
+    interests?: string[] | null;
+    location?: string | null;
+    looking_for?: string | null;
+    profile_pictures: string[] | null; // Array of storage paths OR potentially full URLs
+    created_at: string; // ISO string
+    updated_at: string; // ISO string
+    is_profile_complete: boolean; // from original query
 }
 
-// Define the combined type for state and rendering
-type ProfileWithDisplayUrl = ProfileItem & { display_picture_url: string | null };
-
-// Export the component function directly
 export default function ProfileBrowseScreen() {
-    const { user } = useApp(); // Get current user object (e.g., { id: string } | null)
-    const [profiles, setProfiles] = useState<ProfileWithDisplayUrl[]>([]); // Use combined type
-    const [loading, setLoading] = useState(false); // Start false until user is confirmed
+    const { user } = useApp();
+    const [profiles, setProfiles] = useState<Profile[]>([]); // Store transformed profiles for ProfileCard
+    const [currentIndex, setCurrentIndex] = useState(0);
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
-    // Function to get the public URL (memoized with useCallback as it's stable)
-    const getPublicImageUrl = useCallback((path: string | null | undefined): string | null => {
-        if (!path) return null;
-        try {
-            // *** SUPABASE INTERACTION ***
-            const { data } = supabase.storage
-                .from('profile_pictures') // Ensure this bucket name is correct
-                .getPublicUrl(path);
-            return data?.publicUrl ?? null;
-        } catch (err) {
-            console.error("Error getting public URL for path", path, ":", err);
+    // Function to get the public URL
+    const getPublicImageUrl = useCallback((pathOrUrl: string | null | undefined): string | null => {
+        if (!pathOrUrl) {
+            // console.log("getPublicImageUrl: called with null or undefined pathOrUrl");
             return null;
         }
-    }, []); // Empty dependency array - this function doesn't depend on component state/props
 
-    // Function to fetch profiles (memoized with useCallback)
+        // Check if pathOrUrl is already a fully qualified HTTP/HTTPS URL
+        if (pathOrUrl.startsWith('http://') || pathOrUrl.startsWith('https://')) {
+            // If it's already a URL, return it directly.
+            // This prevents Supabase from prepending its base path again.
+            // console.log(`getPublicImageUrl: pathOrUrl "${pathOrUrl}" is already a URL, returning as is.`);
+            return pathOrUrl;
+        }
+
+        // If not a full URL, assume it's a relative path and get the public URL from Supabase storage.
+        try {
+            // console.log(`getPublicImageUrl: pathOrUrl "${pathOrUrl}" is a relative path, calling Supabase storage.`);
+            const { data } = supabase.storage
+                .from('profile_pictures') // Ensure this bucket name is correct
+                .getPublicUrl(pathOrUrl); // pathOrUrl here should be relative like "folder/image.jpg"
+            
+            if (data?.publicUrl) {
+                // console.log(`getPublicImageUrl: successfully got public URL "${data.publicUrl}" for path "${pathOrUrl}".`);
+                return data.publicUrl;
+            } else {
+                // console.warn(`getPublicImageUrl: Supabase returned no publicUrl for path "${pathOrUrl}". Full response data:`, data);
+                return null;
+            }
+        } catch (err) {
+            console.error(`getPublicImageUrl: Error getting public URL for path "${pathOrUrl}":`, err);
+            return null;
+        }
+    }, []); // No dependencies needed as supabase client is stable and function is pure based on input
+
+    // Function to fetch and transform profiles
     const fetchProfiles = useCallback(async () => {
-        // This function now relies on 'user' being available due to the useEffect dependency
-        if (!user) return; // Should ideally not be hit if useEffect logic is correct
+        if (!user) return;
 
-        console.log(`Workspaceing profiles, excluding user ID: ${user.id}`); // Log current user id
+        console.log(`Workspaceing profiles, excluding user ID: ${user.id}`);
         setLoading(true);
         setError(null);
-        setProfiles([]); // Clear previous profiles before fetching
+        // Consider not clearing profiles immediately to avoid UI flicker if fetch is fast
+        // setProfiles([]); 
+        // setCurrentIndex(0);
 
         try {
-            // *** SUPABASE INTERACTION (MODIFIED) ***
             const { data, error: fetchError } = await supabase
                 .from('individual_profiles') // Ensure this table name is correct
-                .select('user_id, first_name, profile_pictures') // Select relevant columns
-                .eq('is_profile_complete', true) // Ensure this column exists and is boolean
-                .neq('user_id', user.id) // Filter out the current user
-                .limit(50); // Limit results
+                .select('user_id, first_name, last_name, date_of_birth, gender, bio, interests, location, looking_for, profile_pictures, created_at, updated_at, is_profile_complete')
+                .eq('is_profile_complete', true)
+                .neq('user_id', user.id)
+                .limit(50); // Adjust limit as needed
 
             if (fetchError) {
                 console.error("Error fetching profiles:", fetchError);
                 throw fetchError;
             }
 
-            if (data) {
-                console.log(`Workspaceed ${data.length} profiles.`);
-                // Add the public URL for the first picture to each profile object
-                const profilesWithUrls = data.map(profile => {
-                    const firstPicPath = profile.profile_pictures?.[0]; // Get the first picture path
-                    const publicUrl = getPublicImageUrl(firstPicPath); // Get its public URL
-                    // Log if URL generation fails for a specific path
-                    if (firstPicPath && !publicUrl) {
-                       console.warn(`Could not get public URL for path: ${firstPicPath}`);
-                    }
-                    return { ...profile, display_picture_url: publicUrl }; // Add the URL field
-                });
-                setProfiles(profilesWithUrls);
+            if (data && data.length > 0) {
+                console.log(`Workspaceed ${data.length} raw profiles.`);
+                const transformedProfiles: Profile[] = await Promise.all(
+                    data.map(async (rawProfile: FetchedUserProfileData) => {
+                        const profilePicturesValues = Array.isArray(rawProfile.profile_pictures) ? rawProfile.profile_pictures : [];
+                        
+                        const publicUrlsPromises = profilePicturesValues.map(pathOrUrl => getPublicImageUrl(pathOrUrl));
+                        const resolvedUrls = await Promise.all(publicUrlsPromises);
+                        const validPublicUrls = resolvedUrls.filter(url => url !== null) as string[];
+
+                        if (profilePicturesValues.length > 0 && validPublicUrls.length === 0) {
+                            console.warn(`Could not get public URLs for any paths/URLs in profile ${rawProfile.user_id}: ${profilePicturesValues.join(', ')}`);
+                        } else if (profilePicturesValues.length > 0 && validPublicUrls.length < profilePicturesValues.length) {
+                            console.warn(`Could not get public URLs for some paths/URLs in profile ${rawProfile.user_id}.`);
+                        }
+                        
+                        return {
+                            id: rawProfile.user_id,
+                            first_name: rawProfile.first_name,
+                            last_name: rawProfile.last_name,
+                            date_of_birth: rawProfile.date_of_birth,
+                            gender: rawProfile.gender,
+                            bio: rawProfile.bio,
+                            interests: rawProfile.interests,
+                            location: rawProfile.location,
+                            looking_for: rawProfile.looking_for,
+                            profile_pictures: validPublicUrls, // Use the processed URLs
+                            created_at: rawProfile.created_at || new Date().toISOString(), // Fallback if not in DB
+                            updated_at: rawProfile.updated_at || new Date().toISOString(), // Fallback if not in DB
+                            // is_profile_complete: rawProfile.is_profile_complete, // Not used in Profile interface directly
+                        };
+                    })
+                );
+                setProfiles(transformedProfiles);
+                setCurrentIndex(0); // Reset index for the new set of profiles
+                console.log(`Transformed ${transformedProfiles.length} profiles.`);
             } else {
-                 console.log("No profiles data received.");
-                 setProfiles([]); // Ensure profiles is empty array if data is null/undefined
+                console.log("No profiles data received or data array is empty.");
+                setProfiles([]);
+                setCurrentIndex(0);
             }
 
         } catch (err: any) {
             console.error("Catch block error fetching profiles:", err);
             setError(err.message || "Failed to fetch profiles.");
+            setProfiles([]); // Clear profiles on error
+            setCurrentIndex(0);
         } finally {
             setLoading(false);
         }
-    // }, [user, getPublicImageUrl]); // Depend on user and getPublicImageUrl
-     }, [user?.id, getPublicImageUrl]); // Depend only on user.id if that's sufficient
+    }, [user, getPublicImageUrl]); // getPublicImageUrl is memoized
 
-
-    // useEffect to trigger fetchProfiles when user is available/changes
     useEffect(() => {
         if (user) {
             console.log("User found, fetching profiles...");
             fetchProfiles();
         } else {
-             console.log("User not available yet.");
-            // Optionally clear profiles or set loading state if needed when user logs out
-             setProfiles([]);
-             setLoading(false); // Not loading if no user
+            console.log("User not available yet.");
+            setProfiles([]);
+            setCurrentIndex(0);
+            setLoading(false); // Ensure loading is false if no user
+            setError(null); // Clear any previous errors
         }
-    }, [user, fetchProfiles]); // Depend on user object and the fetch function itself
+    }, [user, fetchProfiles]);
 
-    // Render item function for FlatList
-    const renderProfile = ({ item }: { item: ProfileWithDisplayUrl }) => ( // Use combined type
-        <View style={styles.profileCard}>
-            <Image
-                source={item.display_picture_url ? { uri: item.display_picture_url } : require('../assets/default-avatar.png')} // CHECK PATH: Verify default avatar exists
-                style={styles.avatar}
-                onError={(e) => console.log(`Image load error for ${item.display_picture_url || 'default'}:`, e.nativeEvent.error)} // Log image load errors
-            />
-            <Text style={styles.profileName}>{item.first_name}</Text>
-        </View>
-    );
+    const goToNextProfile = useCallback(() => {
+        setCurrentIndex(prevIndex => {
+            if (prevIndex < profiles.length - 1) {
+                return prevIndex + 1;
+            }
+            // Optional: Loop back, show end message, or stay on last
+            // Alert.alert("End of Profiles", "You've seen all available profiles!");
+            return prevIndex; // Stay on last
+        });
+    }, [profiles.length]);
 
-    // Handle case where user is not logged in yet
-    if (!user && !loading) { // Check if user is explicitly null/undefined and we're not in an initial loading state
-         return (
-             <SafeAreaView style={styles.safeArea}>
-                 <View style={styles.container}>
-                     <Text style={styles.noProfilesText}>Please log in to browse profiles.</Text>
-                     {/* Optionally add a login button */}
-                 </View>
-             </SafeAreaView>
-         );
-     }
+    const goToPrevProfile = useCallback(() => {
+        setCurrentIndex(prevIndex => {
+            if (prevIndex > 0) {
+                return prevIndex - 1;
+            }
+            return prevIndex; // Stay on first
+        });
+    }, []);
+
+    const handleLikeProfile = useCallback(async (likedProfileId: string) => {
+        if (!user) {
+            Alert.alert("Login Required", "Please log in to like profiles.");
+            return;
+        }
+        console.log(`User ${user.id} liked profile ${likedProfileId}`);
+        try {
+            const { error: likeError } = await supabase.from('profile_likes').insert({
+                liker_user_id: user.id,
+                liked_profile_id: likedProfileId, 
+            });
+
+            if (likeError) throw likeError;
+
+            Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
+            // goToNextProfile(); // Optionally advance to the next profile after a like
+        } catch (err: any) {
+            console.error("Error liking profile:", err);
+            Alert.alert("Error", err.message || "Could not record your like. Please try again.");
+        }
+    }, [user, profiles/*, goToNextProfile*/]);
+
+
+    if (!user && !loading) { // Also check loading state
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.centeredMessageContainer}>
+                    <Text style={styles.infoText}>Please log in to browse profiles.</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+    
+    if (loading) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.centeredMessageContainer}>
+                    <ActivityIndicator size="large" color="#FF6347" />
+                    <Text style={styles.loadingText}>Finding profiles...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (error) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.centeredMessageContainer}>
+                    <Text style={styles.errorText}>{error}</Text>
+                    <Pressable onPress={fetchProfiles} style={styles.button}>
+                        <Text style={styles.buttonText}>Try Again</Text>
+                    </Pressable>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    if (profiles.length === 0) {
+        return (
+            <SafeAreaView style={styles.safeArea}>
+                <View style={styles.centeredMessageContainer}>
+                    <Text style={styles.infoText}>No other profiles found yet. Check back soon!</Text>
+                     <Pressable onPress={fetchProfiles} style={styles.button}>
+                        <Text style={styles.buttonText}>Refresh</Text>
+                    </Pressable>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    const currentProfile = profiles[currentIndex];
 
     return (
         <SafeAreaView style={styles.safeArea}>
-            <View style={styles.container}>
-                <Text style={styles.title}>Meet the Early Members!</Text>
-                <Text style={styles.subtitle}>Discover profiles available in your area.</Text>
+            <View style={styles.storyContainer}>
+                {/* Progress Bars */}
+                <View style={styles.progressBarsContainer}>
+                    {profiles.map((_, index) => (
+                        <View
+                            key={`progress-${index}`}
+                            style={[
+                                styles.progressBarSegment,
+                                index === currentIndex ? styles.progressBarSegmentActive : styles.progressBarSegmentInactive,
+                            ]}
+                        />
+                    ))}
+                </View>
 
-                {/* Loading Indicator */}
-                {loading && <ActivityIndicator size="large" color="#FF6347" style={styles.loader} />}
-
-                {/* Error Message */}
-                {!loading && error && <Text style={styles.errorText}>{error}</Text>}
-
-                {/* No Profiles Found Message */}
-                {!loading && !error && profiles.length === 0 && (
-                    <Text style={styles.noProfilesText}>No other profiles found yet. Be the first to connect when we launch!</Text>
-                )}
-
-                {/* Profiles List */}
-                {!loading && !error && profiles.length > 0 && (
-                    <FlatList
-                        data={profiles}
-                        renderItem={renderProfile}
-                        keyExtractor={(item) => item.user_id} // Use user_id as key
-                        contentContainerStyle={styles.listContainer}
-                        numColumns={2} // Display as a grid
+                {/* Profile Card Display */}
+                {currentProfile ? (
+                    <ProfileCard
+                        profile={currentProfile}
+                        onLike={handleLikeProfile} 
+                        isVisible={true} 
                     />
+                ) : (
+                    // This case should ideally not be hit if profiles.length > 0 and currentIndex is valid
+                    <View style={styles.centeredMessageContainer}> 
+                        <Text style={styles.infoText}>Loading profile...</Text>
+                    </View>
                 )}
+
+                {/* Tap Navigation Areas */}
+                <Pressable style={styles.tapAreaLeft} onPress={goToPrevProfile} />
+                <Pressable style={styles.tapAreaRight} onPress={goToNextProfile} />
             </View>
         </SafeAreaView>
     );
-} // End of ProfileBrowseScreen component
+}
 
 const styles = StyleSheet.create({
     safeArea: {
         flex: 1,
-        backgroundColor: '#f8f9fa', // Light background
+        backgroundColor: '#1c1c1e', 
     },
-    container: {
+    storyContainer: {
         flex: 1,
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        position: 'relative', 
+    },
+    centeredMessageContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
         padding: 20,
     },
-    title: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        textAlign: 'center',
-        marginBottom: 8,
-        color: '#333',
-    },
-    subtitle: {
-        fontSize: 14,
-        textAlign: 'center',
-        color: '#6c757d', // Gray text
-        marginBottom: 20,
-    },
-    loader: {
-        marginTop: 50,
+    loadingText: {
+        marginTop: 10,
+        fontSize: 16,
+        color: '#f0f0f0',
     },
     errorText: {
-        color: 'red',
+        color: '#FF6347', 
         textAlign: 'center',
-        marginTop: 20,
         fontSize: 16,
+        marginBottom: 20,
     },
-    noProfilesText: {
+    infoText: {
         textAlign: 'center',
-        marginTop: 50,
         fontSize: 16,
-        color: '#6c757d', // Gray text
-        paddingHorizontal: 20, // Add padding for longer text
+        color: '#d3d3d3', 
+        paddingHorizontal: 20,
+        marginBottom: 20,
     },
-    listContainer: {
-        // No specific styles needed for grid if using numColumns + flex on items
-        paddingBottom: 20, // Add padding at the bottom
+    button: {
+        marginTop: 10, // Adjusted from 20 to 10 if error/info text has margin bottom
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        backgroundColor: '#FF6347',
+        borderRadius: 5,
     },
-    profileCard: {
-        backgroundColor: '#ffffff', // White cards
-        borderRadius: 10,
-        padding: 15,
-        margin: 8, // Spacing between cards
-        alignItems: 'center',
-        shadowColor: "#000",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.1,
-        shadowRadius: 3,
-        elevation: 2,
-        flex: 1, // Make cards expand equally in grid row
-        maxWidth: '46%', // Approx width for 2 columns considering margins (100% / 2 cols - margin)
-        aspectRatio: 0.8, // Make cards slightly taller than wide
+    buttonText: {
+        color: 'white',
+        fontSize: 16,
+        fontWeight: 'bold',
     },
-    avatar: {
-        width: 80,
-        height: 80,
-        borderRadius: 40, // Circular avatar
-        marginBottom: 10,
-        backgroundColor: '#e0e0e0', // Placeholder background
+    progressBarsContainer: {
+        position: 'absolute',
+        top: 10, 
+        left: 10,
+        right: 10,
+        flexDirection: 'row',
+        height: 3,
+        zIndex: 10,
+        gap: 4, 
     },
-    profileName: {
-        fontSize: 14,
-        fontWeight: '500',
-        textAlign: 'center',
-        color: '#333',
-    }
+    progressBarSegment: {
+        flex: 1,
+        height: '100%',
+        borderRadius: 1.5,
+    },
+    progressBarSegmentActive: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    },
+    progressBarSegmentInactive: {
+        backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    tapAreaLeft: {
+        position: 'absolute',
+        left: 0,
+        top: 0, 
+        bottom: 0,
+        width: '30%', 
+        zIndex: 5, 
+        // backgroundColor: 'rgba(0, 255, 0, 0.05)', // For debugging tap area
+    },
+    tapAreaRight: {
+        position: 'absolute',
+        right: 0,
+        top: 0,
+        bottom: 0,
+        width: '70%', // Covers right 70% of the screen for 'next'
+        zIndex: 5,
+        // backgroundColor: 'rgba(255, 0, 0, 0.05)', // For debugging tap area
+    },
 });
-
-// DO NOT add another export default line here
