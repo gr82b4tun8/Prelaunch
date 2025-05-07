@@ -52,7 +52,7 @@ const calculateAge = (dobString: string): number | null => {
 };
 
 const { width: screenWidth } = Dimensions.get("window");
-const cardWidth = screenWidth * 0.95; // Card width is 95% of screen width
+const cardWidth = screenWidth * 0.85; // Card width is 95% of screen width
 
 interface CarouselImageItemProps { url: string; }
 const CarouselImageItem: React.FC<CarouselImageItemProps> = ({ url }) => {
