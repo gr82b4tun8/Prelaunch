@@ -205,7 +205,7 @@ function RootNavigator() {
     isProfileComplete,
     isLoadingSupabase,
     isLoadingWelcomeCheck,
-    hasSeenWelcomeScreen, // We'll use this from context
+    hasSeenWelcomeScreen,
     completeWelcomeScreen
   } = useApp();
 
@@ -226,34 +226,48 @@ function RootNavigator() {
   type WelcomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'WelcomeScreen'>;
 
   // Determine if the welcome screen should be shown
-  const showWelcomeScreen = FORCE_SHOW_WELCOME_SCREEN_FOR_DEV || !hasSeenWelcomeScreen;
+  const showWelcomeScreenActual = FORCE_SHOW_WELCOME_SCREEN_FOR_DEV || !hasSeenWelcomeScreen;
+
+  let initialRouteName: keyof RootStackParamList;
+
+  if (showWelcomeScreenActual) {
+    initialRouteName = 'WelcomeScreen';
+  } else if (!session) {
+    initialRouteName = 'AuthPage'; // AuthPage can navigate to CreateAccount
+  } else if (!isProfileComplete) {
+    initialRouteName = 'CreateProfileScreen';
+  } else {
+    // The IS_PRE_LAUNCH_BUILD flag in the original code always resolved to ProfileBrowseScreen
+    // when session exists and profile is complete.
+    initialRouteName = 'ProfileBrowseScreen';
+  }
 
   return (
     <NavigationContainer>
-      <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {showWelcomeScreen ? (
-          // Pass navigation and the completion handler to WelcomeScreen
-          <Stack.Screen name="WelcomeScreen">
-            {(props) => (
-              <WelcomeScreen
-                {...props}
-                navigation={props.navigation as WelcomeScreenNavigationProp} // Explicitly type navigation
-                onWelcomeComplete={completeWelcomeScreen} // Pass the callback
-              />
-            )}
-          </Stack.Screen>
-        ) : !session ? (
-          <>
-            <Stack.Screen name="AuthPage" component={AuthPage} />
-            <Stack.Screen name="CreateAccount" component={CreateAccount} />
-          </>
-        ) : !isProfileComplete ? (
-          <Stack.Screen name="CreateProfileScreen" component={CreateProfileScreen} />
-        ) : IS_PRE_LAUNCH_BUILD ? (
-          <Stack.Screen name="ProfileBrowseScreen" component={ProfileBrowseScreen} />
-        ) : (
-          <Stack.Screen name="ProfileBrowseScreen" component={ProfileBrowseScreen} />
-        )}
+      <Stack.Navigator
+        initialRouteName={initialRouteName} // Set the initial route dynamically
+        screenOptions={{ headerShown: false }}
+      >
+        {/* Define all screens unconditionally so they are known to the navigator */}
+        <Stack.Screen name="WelcomeScreen">
+          {(props) => (
+            <WelcomeScreen
+              {...props}
+              navigation={props.navigation as WelcomeScreenNavigationProp} // Retained your specific type
+              onWelcomeComplete={completeWelcomeScreen}
+            />
+          )}
+        </Stack.Screen>
+        <Stack.Screen name="AuthPage" component={AuthPage} />
+        <Stack.Screen name="CreateAccount" component={CreateAccount} />
+        <Stack.Screen name="CreateProfileScreen" component={CreateProfileScreen} />
+        <Stack.Screen name="ProfileBrowseScreen" component={ProfileBrowseScreen} />
+        {/*
+          If IS_PRE_LAUNCH_BUILD was intended to render a *different component*
+          (e.g., a TestFlight specific screen) when the profile is complete,
+          you would add that screen here too and adjust the initialRouteName logic accordingly.
+          Based on the original code, it always resulted in ProfileBrowseScreen in this slot.
+        */}
       </Stack.Navigator>
     </NavigationContainer>
   );

@@ -35,7 +35,7 @@ interface WelcomeSlide {
 }
 
 // Content for the welcome slides
-const APP_NAME = "VenueVibe"; // You can change this
+const APP_NAME = "Sphere"; // You can change this
 
 const slides: WelcomeSlide[] = [
   {
@@ -150,10 +150,13 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation, onWelcomeComp
     }
   };
 
+  const backgroundGradientColors = ['#fe9494', '#00008b'];
+  const buttonGradientColors = [...backgroundGradientColors].reverse(); // Reversed for buttons
+
   return (
     <View style={styles.fullScreenGradientContainer}>
       <LinearGradient
-        colors={['#fe9494', '#00008b']} // Red to Dark Midnight Blue (e.g., #00004d)
+        colors={backgroundGradientColors} // Red to Dark Midnight Blue
         start={{ x: 0, y: 0.5 }} // Gradient from left
         end={{ x: 1, y: 0.5 }}   // Gradient to right
         style={StyleSheet.absoluteFillObject} // Fills the container
@@ -213,11 +216,25 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation, onWelcomeComp
 
           {currentIndex < slides.length - 1 ? (
             <TouchableOpacity style={styles.button} onPress={goToNextSlide}>
-              <Text style={styles.buttonText}>Next</Text>
+              <LinearGradient
+                colors={buttonGradientColors}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.buttonGradientWrapper}
+              >
+                <Text style={styles.buttonText}>Next</Text>
+              </LinearGradient>
             </TouchableOpacity>
           ) : (
             <TouchableOpacity style={[styles.button, styles.signUpButton]} onPress={handleSignUp}>
-              <Text style={styles.buttonText}>Create My Profile & Get Early Access!</Text>
+              <LinearGradient
+                colors={buttonGradientColors}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.buttonGradientWrapper}
+              >
+                <Text style={styles.buttonText}>Create My Profile & Get Early Access!</Text>
+              </LinearGradient>
             </TouchableOpacity>
           )}
         </View>
@@ -232,15 +249,14 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent', // Changed from '#FFFFFF'
+    backgroundColor: 'transparent',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   scrollView: {
     flex: 1,
-    // backgroundColor: 'transparent' // ScrollView is transparent by default
   },
   scrollViewContent: {
-    // No changes needed here for the gradient
+    // No changes needed here
   },
   slide: {
     width: SCREEN_WIDTH,
@@ -248,8 +264,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 60, // Ensure this doesn't hide content behind bottomControls
-    // backgroundColor: 'transparent' // Slides are transparent by default
+    paddingBottom: 120, // Adjusted to ensure content visible above bottomControls
   },
   imageContainer: {
     width: '100%',
@@ -263,11 +278,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderRadius: 15,
     borderWidth: 1,
-    borderColor: '#DDDDDD', // This light border will be against the gradient
+    borderColor: '#DDDDDD',
   },
   placeholderText: {
     fontSize: 16,
-    color: '#FFFFF0', // Preserved: Note that this dark color might be hard to read
+    color: '#FFFFF0',
     fontWeight: 'bold',
     textAlign: 'center',
     padding: 10,
@@ -280,13 +295,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFFFF0', // Preserved: Note that this dark color might be hard to read
+    color: '#FFFFF0',
     textAlign: 'center',
     marginBottom: 12,
   },
   description: {
     fontSize: 16,
-    color: '#FFFFF0', // Preserved: Note that this dark color might be hard to read
+    color: '#FFFFF0',
     textAlign: 'center',
     lineHeight: 22,
     paddingHorizontal: 10,
@@ -300,9 +315,8 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-    backgroundColor: 'transparent', // Changed from '#FFFFFF'
-    borderTopWidth: 1,
-    borderTopColor: '#EEEEEE', // This light border will be against the gradient
+    backgroundColor: 'transparent',
+    borderTopWidth: 0, // Removed border as it might not look good on gradient
   },
   pagination: {
     flexDirection: 'row',
@@ -316,28 +330,40 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   dotActive: {
-    backgroundColor: '#007AFF', // This should still be visible
+    backgroundColor: '#FFFFFF', // Changed for better visibility on gradient
   },
   dotInactive: {
-    backgroundColor: '#C7C7CC', // This light grey might need adjustment for better visibility
+    backgroundColor: 'rgba(255, 255, 255, 0.5)', // Changed for better visibility on gradient
   },
-  button: {
-    backgroundColor: '#007AFF',
-    paddingVertical: 14,
-    paddingHorizontal: 35,
+  button: { // Style for TouchableOpacity
     borderRadius: 25,
     minWidth: SCREEN_WIDTH * 0.7,
+    height: 50,
+    overflow: 'hidden', // Crucial for borderRadius to clip the LinearGradient child
+    // Removed: backgroundColor, paddingVertical, paddingHorizontal, alignItems, justifyContent
+    // These are now handled by buttonGradientWrapper or are inherent to its new structure
+    alignItems: 'center', // Center the LinearGradient if its minWidth is less than TouchableOpacity's width
+    justifyContent: 'center', // Center the LinearGradient if its minHeight is less than TouchableOpacity's height
+  },
+  signUpButton: { // Style for the SignUp button's TouchableOpacity (if it needs specific layout overrides)
+    // backgroundColor: '#34C759', // Removed as gradient is used
+    // Add any specific layout adjustments for the sign-up button's TouchableOpacity here
+    // For example, if it needed a different width: minWidth: SCREEN_WIDTH * 0.8,
+  },
+  buttonGradientWrapper: { // Style for the LinearGradient component inside the button
+    width: '100%', // Make the gradient fill the TouchableOpacity
+    height: '100%', // Make the gradient fill the TouchableOpacity
+    paddingVertical: 14,
+    paddingHorizontal: 35,
     alignItems: 'center',
     justifyContent: 'center',
-    height: 50,
-  },
-  signUpButton: {
-    backgroundColor: '#34C759',
+    borderRadius: 25, // Also apply borderRadius here to be safe, though overflow:hidden on parent is key
   },
   buttonText: {
-    color: '#FFFFFF', // White text will be fine on buttons
+    color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
+    textAlign: 'center', // Ensure text is centered, especially for longer text in signUpButton
   },
 });
 
