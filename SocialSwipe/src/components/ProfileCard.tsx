@@ -1,4 +1,5 @@
-import React, { useCallback, useMemo, useRef } from 'react';
+// components/ProfileCard.tsx
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import {
     View,
     Text,
@@ -6,7 +7,7 @@ import {
     ImageBackground,
     Dimensions,
     Platform,
-    SafeAreaView,
+    Pressable, // Added for arrow buttons
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TapGestureHandler, State } from 'react-native-gesture-handler';
@@ -30,7 +31,7 @@ export interface Profile {
     interests?: string[] | null;
     location?: string | null;
     looking_for?: string | null;
-    profile_pictures: string[];
+    profile_pictures: string[]; // Expect this to be an array of URLs
     created_at: string;
     updated_at: string;
 }
@@ -74,7 +75,16 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     isVisible,
 }) => {
     const age = useMemo(() => calculateAge(profile.date_of_birth), [profile.date_of_birth]);
-    const primaryImage = profile.profile_pictures?.[0] || null;
+    
+    // State for current image index
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+    // Reset image index when the profile changes
+    useEffect(() => {
+        setCurrentImageIndex(0);
+    }, [profile.id]);
+
+    const displayedImageUri = profile.profile_pictures?.[currentImageIndex] || null;
 
     const heartScale = useSharedValue(0);
     const heartOpacity = useSharedValue(0);
@@ -105,16 +115,33 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
         }
     }, [profile.id, onLike, triggerLikeAnimation]);
 
+    // Handlers for image navigation
+    const goToPrevImage = useCallback(() => {
+        setCurrentImageIndex(prev => Math.max(0, prev - 1));
+    }, []);
+
+    const goToNextImage = useCallback(() => {
+        if (profile.profile_pictures) {
+            setCurrentImageIndex(prev => Math.min(profile.profile_pictures.length - 1, prev + 1));
+        }
+    }, [profile.profile_pictures]);
+
+
     if (!isVisible) {
         return null;
     }
 
+    // This component renders the main content that overlays the image (gradient, info, etc.)
+    // It now also includes the image navigation arrows.
     const CardContents = () => (
         <>
+            {/* Gradient overlay from bottom */}
             <LinearGradient
-                colors={['#001F3F00', '#001F3FCC']}
+                colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.8)']}
                 style={styles.gradientOverlay}
             />
+
+            {/* Tap zones for PREV/NEXT PROFILE navigation */}
             <View style={styles.navTapZoneContainer}>
                 <TapGestureHandler
                     onHandlerStateChange={({ nativeEvent }) => {
@@ -126,7 +153,8 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                 >
                     <View style={styles.navTapArea} />
                 </TapGestureHandler>
-                <View style={styles.navTapCenterArea} />
+                {/* Center area is part of double tap, but also a spacer for profile nav tap zones */}
+                <View style={styles.navTapCenterArea} /> 
                 <TapGestureHandler
                     onHandlerStateChange={({ nativeEvent }) => {
                         if (nativeEvent.state === State.END && nativeEvent.oldState === State.ACTIVE) {
@@ -138,9 +166,43 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                     <View style={styles.navTapArea} />
                 </TapGestureHandler>
             </View>
+
+            {/* Image Navigation Arrows */}
+            {profile.profile_pictures && profile.profile_pictures.length > 1 && (
+                <View style={styles.imageNavigationContainer}>
+                    {/* Left Arrow (Previous Image) */}
+                    <View style={styles.imageNavButtonWrapper}>
+                        {currentImageIndex > 0 && (
+                            <Pressable
+                                onPress={goToPrevImage}
+                                style={[styles.imageNavButton, styles.imageNavButtonLeft]}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Increases tappable area
+                            >
+                                <Icon name="chevron-back-outline" size={36} color="#FFFFFF" style={styles.navIconShadow} />
+                            </Pressable>
+                        )}
+                    </View>
+                    {/* Right Arrow (Next Image) */}
+                    <View style={styles.imageNavButtonWrapper}>
+                        {currentImageIndex < (profile.profile_pictures?.length ?? 0) - 1 && (
+                            <Pressable
+                                onPress={goToNextImage}
+                                style={[styles.imageNavButton, styles.imageNavButtonRight]}
+                                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} // Increases tappable area
+                            >
+                                <Icon name="chevron-forward-outline" size={36} color="#FFFFFF" style={styles.navIconShadow} />
+                            </Pressable>
+                        )}
+                    </View>
+                </View>
+            )}
+
+            {/* Animated heart for double tap like */}
             <Reanimated.View style={[styles.animatedHeartContainer, animatedHeartStyle]}>
                 <Icon name="heart" size={100} color="#FFFFFF" style={styles.heartIcon} />
             </Reanimated.View>
+
+            {/* Profile information at the bottom */}
             <View style={styles.infoContainer}>
                 <Text style={styles.nameAgeText}>
                     {profile.first_name}, {age}
@@ -183,96 +245,135 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     );
 
     return (
-        <SafeAreaView style={styles.fullScreenSafe}>
-            <TapGestureHandler
-                ref={doubleTapRef}
-                onHandlerStateChange={onDoubleTapEvent}
-                numberOfTaps={2}
-            >
-                <Reanimated.View style={styles.fullScreenView} collapsable={false}>
-                    {primaryImage ? (
-                        <ImageBackground
-                            source={{ uri: primaryImage }}
-                            style={styles.backgroundImage}
-                            resizeMode="cover"
-                            onError={(error) => console.log("Image loading error: ", error.nativeEvent.error)}
-                        >
-                            <CardContents />
-                        </ImageBackground>
-                    ) : (
-                        <View style={[styles.backgroundImage, styles.fallbackBackground]}>
-                            <CardContents />
+        <TapGestureHandler
+            ref={doubleTapRef}
+            onHandlerStateChange={onDoubleTapEvent}
+            numberOfTaps={2}
+        >
+            <Reanimated.View style={styles.fullScreenView} collapsable={false}>
+                {displayedImageUri ? (
+                    <ImageBackground
+                        source={{ uri: displayedImageUri }}
+                        style={styles.backgroundImage}
+                        resizeMode="cover"
+                        onError={(error) => console.log("Image loading error: ", error.nativeEvent.error)}
+                    >
+                        <CardContents />
+                    </ImageBackground>
+                ) : (
+                    <View style={[styles.backgroundImage, styles.fallbackBackground]}>
+                        {/* Show CardContents even for fallback, so info is visible */}
+                        <CardContents /> 
+                        {/* Optionally, add a placeholder text if no image and fallback */}
+                        <View style={styles.noImageTextContainer}>
+                            <Text style={styles.noImageText}>No image available</Text>
                         </View>
-                    )}
-                </Reanimated.View>
-            </TapGestureHandler>
-        </SafeAreaView>
+                    </View>
+                )}
+            </Reanimated.View>
+        </TapGestureHandler>
     );
 };
 
 const styles = StyleSheet.create({
-    fullScreenSafe: {
-        flex: 1,
-        backgroundColor: '#000', // Fallback for SafeAreaView edges
-    },
     fullScreenView: {
         flex: 1,
     },
-    backgroundImage: { // Common styles for both ImageBackground and fallback View
+    backgroundImage: { 
         flex: 1,
         width: screenWidth,
         height: screenHeight,
         justifyContent: 'flex-end', // Aligns infoContainer (child of CardContents) to the bottom
     },
     fallbackBackground: {
-        backgroundColor: '#001F3F', // Deep navy, matching the gradient start color
+        backgroundColor: '#001F3F', 
+        justifyContent: 'center', // Center "No image" text if needed
+        alignItems: 'center',
+    },
+    noImageTextContainer: { // Styles for "No image available" text on fallback
+        position: 'absolute', // Position it over the fallback background
+        top: '40%', // Roughly center it vertically before info box
+        alignSelf: 'center',
+    },
+    noImageText: {
+        color: 'rgba(255, 255, 255, 0.7)',
+        fontSize: 18,
+        fontStyle: 'italic',
     },
     gradientOverlay: {
         position: 'absolute',
         left: 0,
         right: 0,
         bottom: 0,
-        height: screenHeight * 0.6, // Adjust gradient height as needed
+        height: screenHeight * 0.5, // Adjusted height for a more subtle gradient from bottom
     },
-    navTapZoneContainer: {
+    navTapZoneContainer: { // For PREV/NEXT PROFILE
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
-        bottom: 0,
+        bottom: 0, // Spans the entire card height
         flexDirection: 'row',
-        zIndex: 1,
+        zIndex: 1, // Below image nav arrows, info box, and heart
     },
-    navTapArea: {
+    navTapArea: { // Takes up 1/3 of the width for profile navigation
+        flex: 1, 
+        height: '100%',
+    },
+    navTapCenterArea: { // Middle 1/3, primarily for double tap
         flex: 1,
         height: '100%',
     },
-    navTapCenterArea: {
-        flex: 1,
-        height: '100%',
+    imageNavigationContainer: { // For PREV/NEXT IMAGE arrows
+        position: 'absolute',
+        top: screenHeight * 0.45, 
+        left: 0,
+        right: 0,
+        flexDirection: 'row',
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        paddingHorizontal: 8, 
+        zIndex: 2, 
     },
-    infoContainer: {
+    imageNavButtonWrapper: { 
+        flex: 1, 
+    },
+    imageNavButton: {
+        padding: 12, 
+    },
+    imageNavButtonLeft: {
+        alignSelf: 'flex-start', 
+    },
+    imageNavButtonRight: {
+        alignSelf: 'flex-end', 
+    },
+    navIconShadow: { 
+        textShadowColor: 'rgba(0, 0, 0, 0.6)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 3,
+    },
+    infoContainer: { // RESTORED ORIGINAL STYLING
         backgroundColor: 'rgba(0, 12, 40, 0.7)',
         padding: 16,
-        paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+        paddingBottom: Platform.OS === 'ios' ? 30 : 20, 
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        marginHorizontal: 20,
+        marginHorizontal: 20, // RESTORED: Keeps info box from screen side edges
         shadowColor: '#000000',
         shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.3,
         shadowRadius: 10,
         elevation: 10,
-        zIndex: 2,
+        zIndex: 2, 
     },
-    nameAgeText: {
+    nameAgeText: { // REMOVED paddingHorizontal
         fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-bold',
         fontWeight: 'bold',
         fontSize: 28,
         color: '#FFFFFF',
         marginBottom: 8,
     },
-    metaRow: {
+    metaRow: { // REMOVED paddingHorizontal
         flexDirection: 'row',
         alignItems: 'center',
         marginBottom: 12,
@@ -288,7 +389,7 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: '500',
     },
-    interestsSection: {
+    interestsSection: { // REMOVED paddingHorizontal
         marginBottom: 12,
     },
     sectionLabel: {
@@ -315,7 +416,8 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         fontWeight: '500',
     },
-    lookingForSection: {},
+    lookingForSection: { // REMOVED paddingHorizontal
+    },
     lookingForText: {
         fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-semibold',
         fontSize: 18,
@@ -330,7 +432,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 3,
+        zIndex: 3, 
     },
     heartIcon: {
         textShadowColor: 'rgba(255, 92, 141, 0.75)',

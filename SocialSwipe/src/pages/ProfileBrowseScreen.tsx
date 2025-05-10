@@ -5,7 +5,7 @@ import {
     Text,
     StyleSheet,
     ActivityIndicator,
-    SafeAreaView, // We'll use this for content padding inside the gradient
+    SafeAreaView, // We'll use this for content padding inside the gradient & for overlays
     Alert,
     Pressable,
     Dimensions,
@@ -134,7 +134,6 @@ export default function ProfileBrowseScreen() {
         }
     }, [user, profiles]);
 
-    // Conditional returns for login, loading, error, no profiles (these do not use the gradient)
     if (!user && !loading) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
@@ -177,16 +176,32 @@ export default function ProfileBrowseScreen() {
 
     const currentProfile = profiles[currentIndex];
 
-    // Main return with Gradient Background
     return (
         <LinearGradient
-            colors={['#FF6B6B', '#FFD166']} // Example: Dark slate to very dark gray (Left to Right)
+            colors={['#FF6B6B', '#FFD166']}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
-            style={styles.gradientFullScreen} // Gradient covers the entire screen
+            style={styles.gradientFullScreen}
         >
-            <SafeAreaView style={styles.safeAreaWithGradientContent}> {/* SafeArea for content padding */}
-                <View style={styles.storyContainer}> {/* This View now just handles layout inside SafeArea */}
+            {currentProfile ? (
+                <ProfileCard
+                    profile={currentProfile}
+                    onLike={handleLikeProfile}
+                    isVisible={true}
+                    onRequestNextProfile={goToNextProfile}
+                    onRequestPrevProfile={goToPrevProfile}
+                />
+            ) : (
+                !loading && (
+                    <View style={styles.centeredMessageContainerOnGradient}>
+                        <Text style={styles.infoText}>No profile to display.</Text>
+                    </View>
+                )
+            )}
+
+            {/* Progress bars overlay, shown only when there are profiles and a current profile exists */}
+            {profiles.length > 0 && currentProfile && (
+                <SafeAreaView style={styles.progressSafeArea}>
                     <View style={styles.progressBarsContainer}>
                         {profiles.map((_, index) => (
                             <View
@@ -198,52 +213,32 @@ export default function ProfileBrowseScreen() {
                             />
                         ))}
                     </View>
-
-                    {currentProfile ? (
-                        <ProfileCard
-                            profile={currentProfile}
-                            onLike={handleLikeProfile} 
-                            isVisible={true} 
-                            onRequestNextProfile={goToNextProfile}
-                            onRequestPrevProfile={goToPrevProfile}
-                        />
-                    ) : (
-                        !loading && (
-                            <View style={styles.centeredMessageContainer}> 
-                                <Text style={styles.infoText}>No profile to display.</Text>
-                            </View>
-                        )
-                    )}
-                </View>
-            </SafeAreaView>
+                </SafeAreaView>
+            )}
         </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
-    gradientFullScreen: { // Style for the LinearGradient root component
+    gradientFullScreen: {
         flex: 1,
     },
-    safeAreaWithGradientContent: { // SafeAreaView *inside* the gradient
+    safeAreaSolidBackground: { 
         flex: 1,
-        backgroundColor: 'transparent', // Crucial: allows gradient to show through
+        backgroundColor: '#1c1c1e',
     },
-    safeAreaSolidBackground: { // For loading/error/login states (NO GRADIENT)
-        flex: 1,
-        backgroundColor: '#1c1c1e', // Original dark background
-    },
-    storyContainer: { // This View is inside SafeAreaView, used for centering content
-        flex: 1,
-        justifyContent: 'center', 
-        alignItems: 'center', 
-        position: 'relative', 
-        // No background color needed here; it sits on the gradient via transparent SafeAreaView
-    },
-    centeredMessageContainer: {
+    centeredMessageContainer: { // For loading/error/login states on solid background
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
+    },
+    centeredMessageContainerOnGradient: { // For "No profile to display" on gradient background
+        flex: 1, // Takes up space if ProfileCard isn't rendered
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+        backgroundColor: 'transparent', // Ensures gradient shows through
     },
     loadingText: {
         marginTop: 10,
@@ -251,7 +246,7 @@ const styles = StyleSheet.create({
         color: '#f0f0f0',
     },
     errorText: {
-        color: '#FF6347', 
+        color: '#FF6347',
         textAlign: 'center',
         fontSize: 16,
         marginBottom: 20,
@@ -259,7 +254,7 @@ const styles = StyleSheet.create({
     infoText: {
         textAlign: 'center',
         fontSize: 16,
-        color: '#d3d3d3',
+        color: '#d3d3d3', // Consider a lighter color if on dark gradient, or keep as is
         paddingHorizontal: 20,
         marginBottom: 20,
     },
@@ -275,16 +270,19 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
-    progressBarsContainer: {
+    progressSafeArea: { // SafeAreaView for progress bars, positioned absolutely
         position: 'absolute',
-        top: 0, // Positioned at the top of the storyContainer (which is inside safe area)
-        left: 10,
-        right: 10,
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10, // Ensures progress bars are on top of ProfileCard
+    },
+    progressBarsContainer: { // Container for the actual progress bar segments
         flexDirection: 'row',
         height: 3,
-        zIndex: 10, 
-        gap: 4, 
-        paddingTop: 10, // Add some padding if status bar is transparent
+        marginHorizontal: 10, // Spacing from screen edges for the group of bars
+        gap: 4,             // Spacing between individual bar segments
+        marginTop: 10,      // Spacing from the top edge of the SafeAreaView content area
     },
     progressBarSegment: {
         flex: 1,
