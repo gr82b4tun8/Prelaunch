@@ -122,17 +122,42 @@ export default function ProfileBrowseScreen() {
     const goToNextProfile = useCallback(() => setCurrentIndex(prev => Math.min(prev + 1, profiles.length - 1)), [profiles.length]);
     const goToPrevProfile = useCallback(() => setCurrentIndex(prev => Math.max(prev - 1, 0)), []);
 
+    // --- MODIFIED LIKING LOGIC ---
     const handleLikeProfile = useCallback(async (likedProfileId: string) => {
-        if (!user) { Alert.alert("Login Required", "Please log in to like profiles."); return; }
+        if (!user) {
+            Alert.alert("Login Required", "Please log in to like profiles.");
+            return;
+        }
+
+        console.log(`Attempting to like profile: ${likedProfileId}`);
+        // Note: No isLiking state in this component, proceed with caution for rapid clicks.
+        // If ProfileCard's onLike can be called rapidly, consider adding a loading state for the like action.
+
         try {
-            const { error: likeError } = await supabase.from('profile_likes').insert({ liker_user_id: user.id, liked_profile_id: likedProfileId });
-            if (likeError) throw likeError;
-            Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
+            const likerUserId = user.id;
+            const likeData = { liker_user_id: likerUserId, liked_user_id: likedProfileId };
+            
+            console.log('Inserting like:', likeData);
+            const { error: insertError } = await supabase.from('likes').insert([likeData]);
+
+            if (insertError) {
+                if (insertError.code === '23505') { // Unique violation (already liked)
+                    console.warn(`Like already exists for profile ${likedProfileId}`);
+                    Alert.alert("Already Liked", `You've already liked ${profiles.find(p => p.id === likedProfileId)?.first_name || 'this profile'}.`);
+                } else {
+                    // Throw other insert errors to be caught by the generic catch block
+                    throw new Error(`Failed to insert like: ${insertError.message} (Code: ${insertError.code})`);
+                }
+            } else {
+                console.log(`Successfully liked profile ${likedProfileId}`);
+                Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
+            }
         } catch (err: any) {
-            console.error("Error liking profile:", err.message);
-            Alert.alert("Error", err.message || "Could not record like.");
+            console.error("Error in handleLikeProfile:", err);
+            Alert.alert("Error Liking Profile", err.message || "Could not record like. Please try again.");
         }
     }, [user, profiles]);
+    // --- END OF MODIFIED LIKING LOGIC ---
 
     if (!user && !loading) {
         return (
@@ -186,7 +211,7 @@ export default function ProfileBrowseScreen() {
             {currentProfile ? (
                 <ProfileCard
                     profile={currentProfile}
-                    onLike={handleLikeProfile}
+                    onLike={handleLikeProfile} // This now uses the updated logic
                     isVisible={true}
                     onRequestNextProfile={goToNextProfile}
                     onRequestPrevProfile={goToPrevProfile}
