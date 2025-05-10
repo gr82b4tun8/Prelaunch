@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
         height: 3,
         marginHorizontal: 10, // Spacing from screen edges for the group of bars
         gap: 4,             // Spacing between individual bar segments
-        marginTop: 10,      // Spacing from the top edge of the SafeAreaView content area
+        marginTop: 55,      // Spacing from the top edge of the SafeAreaView content area
     },
     progressBarSegment: {
         flex: 1,
