@@ -1,10 +1,10 @@
-// App.tsx
 import React, { useState, useEffect, createContext, useContext, ReactNode } from 'react';
-import { ActivityIndicator, View, StyleSheet } from 'react-native'; // Alert removed as it wasn't used directly here
+import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { createNativeStackNavigator, NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Session, User } from '@supabase/supabase-js';
-import { supabase } from './src/lib/supabaseClient';// Adjust path
+import { supabase } from './src/lib/supabaseClient'; // Adjust path
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // --- Gesture Handler Root View Import ---
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -14,13 +14,23 @@ import AuthPage from './src/pages/AuthPage';
 import CreateAccount from './src/pages/CreateAccount';
 import CreateProfileScreen from './src/pages/CreateProfile';
 import ProfileBrowseScreen from './src/pages/ProfileBrowseScreen';
-// import MainAppNavigator from './navigators/MainAppNavigator';
+import WelcomeScreen from './src/pages/WelcomeScreen'; // Assuming WelcomeScreen.tsx is in src/pages
 
 // --- Pre-Launch Build Flag ---
 const IS_PRE_LAUNCH_BUILD = true; // Set to true for TestFlight
 
 // --- Navigation Stacks ---
-const Stack = createNativeStackNavigator();
+// Define ParamList for type safety with navigation
+export type RootStackParamList = {
+  WelcomeScreen: undefined;
+  AuthPage: undefined;
+  CreateAccount: undefined;
+  CreateProfileScreen: undefined;
+  ProfileBrowseScreen: undefined;
+  // Add other routes here
+};
+
+const Stack = createNativeStackNavigator<RootStackParamList>();
 
 // --- Profile Type ---
 interface UserProfile {
@@ -44,18 +54,47 @@ interface AppState {
   user: User | null;
   profile: UserProfile | null;
   isProfileComplete: boolean;
-  isLoading: boolean;
+  isLoadingSupabase: boolean;
+  isLoadingWelcomeCheck: boolean;
+  hasSeenWelcomeScreen: boolean;
   fetchProfile: (userId: string) => Promise<void>;
+  completeWelcomeScreen: () => Promise<void>;
 }
 
 const AppContext = createContext<AppState | undefined>(undefined);
 
+const ASYNC_STORAGE_WELCOME_KEY = '@app/hasSeenWelcomeScreen';
+
 export const AppProvider = ({ children }: { children: ReactNode }) => {
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSupabase, setIsLoadingSupabase] = useState(true);
+  const [isLoadingWelcomeCheck, setIsLoadingWelcomeCheck] = useState(true);
+  const [hasSeenWelcomeScreen, setHasSeenWelcomeScreen] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isProfileComplete, setIsProfileComplete] = useState(false);
+
+  useEffect(() => {
+    // Check if welcome screen has been seen
+    const checkWelcomeStatus = async () => {
+      setIsLoadingWelcomeCheck(true);
+      try {
+        const value = await AsyncStorage.getItem(ASYNC_STORAGE_WELCOME_KEY);
+        if (value === 'true') {
+          setHasSeenWelcomeScreen(true);
+        } else {
+          // Explicitly set to false if not 'true' or null
+          setHasSeenWelcomeScreen(false);
+        }
+      } catch (e) {
+        console.error('Failed to load welcome screen status from AsyncStorage.', e);
+        setHasSeenWelcomeScreen(false); // Default to showing welcome screen if error
+      } finally {
+        setIsLoadingWelcomeCheck(false);
+      }
+    };
+    checkWelcomeStatus();
+  }, []);
 
   const fetchProfile = async (userId: string) => {
       if (!userId) return;
@@ -63,22 +102,17 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       try {
           const { data, error, status } = await supabase
               .from('individual_profiles')
-              // Ensure all fields for UserProfile are selected
               .select('user_id, first_name, last_name, date_of_birth, gender, bio, interests, location, looking_for, profile_pictures, is_profile_complete')
               .eq('user_id', userId)
               .single();
 
           if (error && status !== 406) {
               console.error('Error fetching profile:', error.message);
-              // Potentially set profile to null and isProfileComplete to false here
               setProfile(null);
               setIsProfileComplete(false);
-              throw error; // Re-throw if you want to handle it further up or log it more visibly
-          }
-
-          if (data) {
+          } else if (data) {
               console.log('Profile data found:', data);
-              setProfile(data as UserProfile); // Cast after ensuring all fields are selected
+              setProfile(data as UserProfile);
               setIsProfileComplete(data.is_profile_complete || false);
           } else {
               console.log('No profile found for user, needs creation.');
@@ -89,13 +123,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
           console.error("Error in fetchProfile catch block:", error.message);
           setProfile(null);
           setIsProfileComplete(false);
-          // Alert.alert('Error', 'Could not fetch your profile data.'); // Optional
       }
   };
 
 
   useEffect(() => {
-    setIsLoading(true);
+    setIsLoadingSupabase(true);
     supabase.auth.getSession().then(async ({ data: { session: initialSession } }) => {
       setSession(initialSession);
       const currentUserId = initialSession?.user?.id;
@@ -103,13 +136,12 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
       if (currentUserId) {
         await fetchProfile(currentUserId);
       }
-      setIsLoading(false);
+      setIsLoadingSupabase(false);
     }).catch(error => {
         console.error("Error getting initial session:", error);
-        setIsLoading(false);
+        setIsLoadingSupabase(false);
     });
 
-    // 'authListenerResponse' holds { data: { subscription }, error }
     const authListenerResponse = supabase.auth.onAuthStateChange(
       async (_event, currentAuthSession) => {
         console.log('Auth State Change:', _event, !!currentAuthSession);
@@ -119,32 +151,40 @@ export const AppProvider = ({ children }: { children: ReactNode }) => {
         setUser(currentAuthUser);
 
         if (currentAuthUserId) {
-          setIsLoading(true);
+          setIsLoadingSupabase(true);
           await fetchProfile(currentAuthUserId);
-          setIsLoading(false);
+          setIsLoadingSupabase(false);
         } else {
           setProfile(null);
           setIsProfileComplete(false);
-          setIsLoading(false);
         }
       }
     );
 
-    // The actual subscription object is authListenerResponse.data.subscription
-    // Corrected unsubscribe call:
     return () => {
       authListenerResponse.data?.subscription?.unsubscribe();
     };
   }, []);
 
+  const completeWelcomeScreen = async () => {
+    try {
+      await AsyncStorage.setItem(ASYNC_STORAGE_WELCOME_KEY, 'true');
+      setHasSeenWelcomeScreen(true);
+    } catch (e) {
+      console.error('Failed to save welcome screen status to AsyncStorage.', e);
+    }
+  };
 
   const value = {
     session,
     user,
     profile,
     isProfileComplete,
-    isLoading,
+    isLoadingSupabase,
+    isLoadingWelcomeCheck,
+    hasSeenWelcomeScreen,
     fetchProfile,
+    completeWelcomeScreen,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
@@ -160,9 +200,21 @@ export const useApp = () => {
 
 
 function RootNavigator() {
-  const { session, isProfileComplete, isLoading } = useApp();
+  const {
+    session,
+    isProfileComplete,
+    isLoadingSupabase,
+    isLoadingWelcomeCheck,
+    hasSeenWelcomeScreen, // We'll use this from context
+    completeWelcomeScreen
+  } = useApp();
 
-  if (isLoading) {
+  // --- DEVELOPMENT ONLY: Force Welcome Screen ---
+  // Set this to true to always show WelcomeScreen, false for normal behavior.
+  const FORCE_SHOW_WELCOME_SCREEN_FOR_DEV = true;
+  // --- END DEVELOPMENT ONLY ---
+
+  if (isLoadingSupabase || isLoadingWelcomeCheck) {
     return (
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#FF6347" />
@@ -170,10 +222,27 @@ function RootNavigator() {
     );
   }
 
+  // Type for navigation prop passed to WelcomeScreen
+  type WelcomeScreenNavigationProp = NativeStackNavigationProp<RootStackParamList, 'WelcomeScreen'>;
+
+  // Determine if the welcome screen should be shown
+  const showWelcomeScreen = FORCE_SHOW_WELCOME_SCREEN_FOR_DEV || !hasSeenWelcomeScreen;
+
   return (
     <NavigationContainer>
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!session ? (
+        {showWelcomeScreen ? (
+          // Pass navigation and the completion handler to WelcomeScreen
+          <Stack.Screen name="WelcomeScreen">
+            {(props) => (
+              <WelcomeScreen
+                {...props}
+                navigation={props.navigation as WelcomeScreenNavigationProp} // Explicitly type navigation
+                onWelcomeComplete={completeWelcomeScreen} // Pass the callback
+              />
+            )}
+          </Stack.Screen>
+        ) : !session ? (
           <>
             <Stack.Screen name="AuthPage" component={AuthPage} />
             <Stack.Screen name="CreateAccount" component={CreateAccount} />
@@ -183,7 +252,6 @@ function RootNavigator() {
         ) : IS_PRE_LAUNCH_BUILD ? (
           <Stack.Screen name="ProfileBrowseScreen" component={ProfileBrowseScreen} />
         ) : (
-          // Using ProfileBrowseScreen for non-pre-launch as well, as per your existing logic
           <Stack.Screen name="ProfileBrowseScreen" component={ProfileBrowseScreen} />
         )}
       </Stack.Navigator>
@@ -194,7 +262,6 @@ function RootNavigator() {
 // --- Main App Component ---
 export default function App() {
   return (
-    // --- Wrap your entire app with GestureHandlerRootView ---
     <GestureHandlerRootView style={{ flex: 1 }}>
       <AppProvider>
         <RootNavigator />
@@ -208,6 +275,6 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#f8f9fa', // A light background for loading
   },
 });
