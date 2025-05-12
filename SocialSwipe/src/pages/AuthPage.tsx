@@ -18,8 +18,9 @@ import * as z from 'zod';
 import { useNavigation } from '@react-navigation/native'; // RN Navigation hook
 import { NativeStackNavigationProp } from '@react-navigation/native-stack'; // Type for navigation prop
 import { supabase } from '../lib/supabaseClient'; // Adjusted path for example
-// Ensure lucide-react-native is installed if using icons
-// import { Loader2 } from 'lucide-react-native'; // RN version of icons
+
+// Import LinearGradient
+import { LinearGradient } from 'expo-linear-gradient';
 
 // Import Param List type from App.tsx (or a dedicated types file)
 // This provides type safety for navigation.navigate calls
@@ -66,9 +67,6 @@ const AuthPage: React.FC = () => {
       }
 
       // Login successful!
-      // In RN, navigation state isn't passed like web's location.state easily after context switch.
-      // The main AppContent component now handles showing MainTabs on successful login via context.
-      // So, we don't strictly NEED to navigate here, as AppContent will switch views.
       // Alert.alert("Login Successful!"); // Simple success feedback
 
     } catch (error: any) {
@@ -88,149 +86,160 @@ const AuthPage: React.FC = () => {
   };
 
   return (
-    // Use KeyboardAvoidingView to push content up when keyboard appears
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.keyboardAvoidingView}
     >
-      {/* Use ScrollView to ensure content doesn't get cut off on smaller screens */}
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        {/* Main container View */}
-        <View style={styles.card}>
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Welcome Back!</Text>
-            <Text style={styles.description}>Log in to your account to continue.</Text>
-          </View>
-
-          {/* Content / Form */}
-          <View style={styles.content}>
-            {/* Email Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Email</Text>
-              <Controller
-                control={control}
-                name="email"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.email ? styles.inputError : null]} // Add error style
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="you@example.com"
-                    keyboardType="email-address"
-                    autoCapitalize="none"
-                    autoComplete="email" // Use platform autocomplete hints
-                  />
-                )}
-              />
-              {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
+      <LinearGradient
+        colors={['#fe9494', '#00008b']} // Screen background gradient
+        style={styles.gradientBackground}
+      >
+        <ScrollView contentContainerStyle={styles.scrollContainer}>
+          <LinearGradient
+            colors={['#fe9494', '#00008b']} // Card background gradient - same colors
+            style={styles.card}
+          >
+            {/* Header */}
+            <View style={styles.header}>
+              <Text style={styles.title}>Welcome Back!</Text>
+              <Text style={styles.description}>Log in to your account to continue.</Text>
             </View>
 
-            {/* Password Input */}
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>Password</Text>
-              <Controller
-                control={control}
-                name="password"
-                render={({ field: { onChange, onBlur, value } }) => (
-                  <TextInput
-                    style={[styles.input, errors.password ? styles.inputError : null]}
-                    onBlur={onBlur}
-                    onChangeText={onChange}
-                    value={value}
-                    placeholder="••••••••"
-                    secureTextEntry // Hides password input
-                    autoCapitalize="none"
-                    autoComplete="password"
-                  />
-                )}
-              />
-              {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
-              {/* Optional: Add Forgot Password link later */}
+            {/* Content / Form */}
+            <View style={styles.content}>
+              {/* Email Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Email</Text>
+                <Controller
+                  control={control}
+                  name="email"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput
+                      style={[styles.input, errors.email ? styles.inputError : null]}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      value={value}
+                      placeholder="you@example.com"
+                      placeholderTextColor="#aaa" // Adjusted placeholder text color
+                      keyboardType="email-address"
+                      autoCapitalize="none"
+                      autoComplete="email"
+                    />
+                  )}
+                />
+                {errors.email && <Text style={styles.errorText}>{errors.email.message}</Text>}
+              </View>
+
+              {/* Password Input */}
+              <View style={styles.inputGroup}>
+                <Text style={styles.label}>Password</Text>
+                <Controller
+                  control={control}
+                  name="password"
+                  render={({ field: { onChange, onBlur, value } }) => (
+                    <TextInput
+                      style={[styles.input, errors.password ? styles.inputError : null]}
+                      onBlur={onBlur}
+                      onChangeText={onChange}
+                      value={value}
+                      placeholder="••••••••"
+                      placeholderTextColor="#aaa" // Adjusted placeholder text color
+                      secureTextEntry
+                      autoCapitalize="none"
+                      autoComplete="password"
+                    />
+                  )}
+                />
+                {errors.password && <Text style={styles.errorText}>{errors.password.message}</Text>}
+              </View>
             </View>
-          </View>
 
-          {/* Footer / Actions */}
-          <View style={styles.footer}>
-            {/* Submit Button */}
-            <Pressable
-              style={({ pressed }) => [
-                styles.button,
-                styles.buttonPrimary,
-                loading && styles.buttonDisabled, // Style when disabled
-                pressed && !loading && styles.buttonPrimaryPressed, // Style when pressed
-              ]}
-              onPress={handleSubmit(onSubmit)}
-              disabled={loading}
-            >
-              {loading ? (
-                <ActivityIndicator size="small" color="#ffffff" />
-              ) : (
-                <Text style={styles.buttonTextPrimary}>Log In</Text>
-              )}
-            </Pressable>
+            {/* Footer / Actions */}
+            <View style={styles.footer}>
+              {/* Submit Button */}
+              <Pressable
+                style={({ pressed }) => [
+                  styles.button,
+                  styles.buttonPrimary,
+                  loading && styles.buttonDisabled,
+                  pressed && !loading && styles.buttonPrimaryPressed,
+                ]}
+                onPress={handleSubmit(onSubmit)}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator size="small" color="#ffffff" />
+                ) : (
+                  <Text style={styles.buttonTextPrimary}>Log In</Text>
+                )}
+              </Pressable>
 
-            {/* Sign Up Link */}
-            <Pressable
-              style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
-              onPress={() => navigation.navigate('SignUp')} // Use RN navigation
-              disabled={loading}
-            >
-              <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
-            </Pressable>
-          </View>
-        </View>
-      </ScrollView>
+              {/* Sign Up Link */}
+              <Pressable
+                style={({ pressed }) => [styles.linkButton, pressed && styles.linkButtonPressed]}
+                onPress={() => navigation.navigate('SignUp')} // Assuming 'SignUp' is your CreateAccount route name
+                disabled={loading}
+              >
+                <Text style={styles.linkText}>Don't have an account? Sign Up</Text>
+              </Pressable>
+            </View>
+          </LinearGradient>
+        </ScrollView>
+      </LinearGradient>
     </KeyboardAvoidingView>
   );
 };
 
 // --- Styles ---
-// Using StyleSheet API for styling
 const styles = StyleSheet.create({
   keyboardAvoidingView: {
     flex: 1,
   },
+  gradientBackground: { // Style for the outer LinearGradient (screen background)
+    flex: 1,
+  },
   scrollContainer: {
-    flexGrow: 1, // Ensures content can grow to fill space
-    justifyContent: 'center', // Center content vertically
-    alignItems: 'center', // Center content horizontally
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f8f9fa', // Light background similar to web
+    // backgroundColor: '#f8f9fa', // REMOVED to allow gradient to show through
   },
   card: {
     width: '100%',
-    maxWidth: 400, // Limit card width
-    backgroundColor: '#ffffff',
+    maxWidth: 400,
+    // backgroundColor: '#ffffff', // REMOVED to allow gradient to show
     borderRadius: 12,
     padding: 24,
-    shadowColor: "#000", // Basic shadow for card effect
+    shadowColor: "#000",
     shadowOffset: {
-        width: 0,
-        height: 2,
+      width: 0,
+      height: 2,
     },
     shadowOpacity: 0.1,
     shadowRadius: 4,
-    elevation: 3, // Android shadow
+    elevation: 3,
+    // overflow: 'hidden', // Add this if borderRadius is not clipping the gradient on some platforms
   },
   header: {
     alignItems: 'center',
     marginBottom: 24,
+    backgroundColor: 'transparent', // Ensure no conflicting background
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#333', // Darker text color
+    color: '#FFFFFF', // CHANGED for better contrast
   },
   description: {
     fontSize: 14,
-    color: '#6c757d', // Muted text color
+    color: '#F0F0F0', // CHANGED for better contrast
     textAlign: 'center',
   },
   content: {
     marginBottom: 24,
+    backgroundColor: 'transparent', // Ensure no conflicting background
   },
   inputGroup: {
     marginBottom: 16,
@@ -238,28 +247,30 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#495057',
+    color: '#FFFFFF', // CHANGED for better contrast
     marginBottom: 6,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ced4da',
+    borderColor: '#ced4da', // This border might be hard to see on the gradient
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    backgroundColor: '#fff',
+    backgroundColor: 'rgba(255, 255, 255, 0.2)', // Semi-transparent white for inputs
+    color: '#FFFFFF', // Text color for input
   },
   inputError: {
-    borderColor: '#dc3545', // Red border for errors
+    borderColor: '#FF9999', // Lighter red for error on dark background
   },
   errorText: {
     fontSize: 12,
-    color: '#dc3545', // Red color for error messages
+    color: '#FFCCCC', // Lighter red for error text
     marginTop: 4,
   },
   footer: {
     alignItems: 'center',
+    backgroundColor: 'transparent', // Ensure no conflicting background
   },
   button: {
     width: '100%',
@@ -267,17 +278,17 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 16, // Space between buttons
+    marginBottom: 16,
   },
   buttonPrimary: {
-    backgroundColor: '#FF6347', // Use your theme color (Tomato example)
+    backgroundColor: '#FF6347', // Main button color (same as CreateAccount)
   },
   buttonDisabled: {
-    backgroundColor: '#FF6347',
+    backgroundColor: '#FF6347', // Keep same color but use opacity
     opacity: 0.7,
   },
-  buttonPrimaryPressed: {
-    opacity: 0.85,
+  buttonPrimaryPressed: { // Style for when the primary button is pressed
+    opacity: 0.85, // Slight opacity change on press
   },
   buttonTextPrimary: {
     color: '#ffffff',
@@ -285,14 +296,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   linkButton: {
-    padding: 8, // Add padding for easier pressing
+    padding: 8,
   },
-  linkButtonPressed: {
+  linkButtonPressed: { // Style for when the link button is pressed
     opacity: 0.7,
   },
   linkText: {
     fontSize: 14,
-    color: '#FF6347', // Use your theme color
+    color: '#ADD8E6', // Lighter blue/link color for contrast
     textDecorationLine: 'underline',
   }
 });
