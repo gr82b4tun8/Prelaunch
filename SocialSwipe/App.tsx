@@ -211,7 +211,7 @@ function RootNavigator() {
 
   // --- DEVELOPMENT ONLY: Force Welcome Screen ---
   // Set this to true to always show WelcomeScreen, false for normal behavior.
-  const FORCE_SHOW_WELCOME_SCREEN_FOR_DEV = true;
+  const FORCE_SHOW_WELCOME_SCREEN_FOR_DEV = false; // <--- MODIFIED LINE
   // --- END DEVELOPMENT ONLY ---
 
   if (isLoadingSupabase || isLoadingWelcomeCheck) {
