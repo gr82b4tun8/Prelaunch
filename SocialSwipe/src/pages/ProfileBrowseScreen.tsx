@@ -5,16 +5,28 @@ import {
     Text,
     StyleSheet,
     ActivityIndicator,
-    SafeAreaView, // We'll use this for content padding inside the gradient & for overlays
+    SafeAreaView, // Still used for full-screen error/loading states and progress bars overlay
     Alert,
     Pressable,
     Dimensions,
+    Platform,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient'; // Ensure this is installed
+import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabaseClient';
 import { useApp } from '../../App';
+import { useNavigation } from '@react-navigation/native';
+import { StackNavigationProp } from '@react-navigation/stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // <<<< ADDED IMPORT
 
 import ProfileCard, { Profile } from '../components/ProfileCard';
+
+type RootStackParamList = {
+    ProfileBrowse: undefined;
+    EditProfileScreen: undefined;
+    WelcomeScreen: undefined;
+};
+
+type ProfileBrowseScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ProfileBrowse'>;
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -36,10 +48,38 @@ interface FetchedUserProfileData {
 
 export default function ProfileBrowseScreen() {
     const { user } = useApp();
+    const navigation = useNavigation<ProfileBrowseScreenNavigationProp>();
+    const insets = useSafeAreaInsets(); // <<<< GET SAFE AREA INSETS
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    const handleLogout = async () => {
+        Alert.alert(
+            "Logout",
+            "Are you sure you want to log out?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Logout",
+                    style: "destructive",
+                    onPress: async () => {
+                        setLoading(true);
+                        const { error: signOutError } = await supabase.auth.signOut();
+                        if (signOutError) {
+                            Alert.alert("Logout Error", signOutError.message);
+                            setLoading(false);
+                        }
+                    },
+                },
+            ]
+        );
+    };
+
+    const handleEditProfile = () => {
+        navigation.navigate('EditProfileScreen');
+    };
 
     const getPublicImageUrl = useCallback((pathOrUrl: string | null | undefined): string | null => {
         if (!pathOrUrl) return null;
@@ -55,7 +95,6 @@ export default function ProfileBrowseScreen() {
 
     const fetchProfiles = useCallback(async () => {
         if (!user) return;
-        console.log(`Workspaceing profiles, excluding user ID: ${user.id}`);
         setLoading(true);
         setError(null);
         try {
@@ -69,14 +108,12 @@ export default function ProfileBrowseScreen() {
             if (fetchError) throw fetchError;
 
             if (data && data.length > 0) {
-                console.log(`Workspaceed ${data.length} raw profiles.`);
                 const transformedProfiles: Profile[] = await Promise.all(
                     data.map(async (rawProfile: FetchedUserProfileData) => {
                         const profilePicturesValues = Array.isArray(rawProfile.profile_pictures) ? rawProfile.profile_pictures : [];
                         const publicUrlsPromises = profilePicturesValues.map(pathOrUrl => getPublicImageUrl(pathOrUrl));
                         const resolvedUrls = await Promise.all(publicUrlsPromises);
                         const validPublicUrls = resolvedUrls.filter(url => url !== null) as string[];
-                        
                         return {
                             id: rawProfile.user_id,
                             first_name: rawProfile.first_name,
@@ -110,11 +147,11 @@ export default function ProfileBrowseScreen() {
     }, [user, getPublicImageUrl]);
 
     useEffect(() => {
-        if (user) fetchProfiles();
-        else {
+        if (user) {
+            fetchProfiles();
+        } else {
             setProfiles([]);
             setCurrentIndex(0);
-            setLoading(false);
             setError(null);
         }
     }, [user, fetchProfiles]);
@@ -122,34 +159,23 @@ export default function ProfileBrowseScreen() {
     const goToNextProfile = useCallback(() => setCurrentIndex(prev => Math.min(prev + 1, profiles.length - 1)), [profiles.length]);
     const goToPrevProfile = useCallback(() => setCurrentIndex(prev => Math.max(prev - 1, 0)), []);
 
-    // --- MODIFIED LIKING LOGIC ---
     const handleLikeProfile = useCallback(async (likedProfileId: string) => {
         if (!user) {
             Alert.alert("Login Required", "Please log in to like profiles.");
             return;
         }
-
-        console.log(`Attempting to like profile: ${likedProfileId}`);
-        // Note: No isLiking state in this component, proceed with caution for rapid clicks.
-        // If ProfileCard's onLike can be called rapidly, consider adding a loading state for the like action.
-
         try {
             const likerUserId = user.id;
             const likeData = { liker_user_id: likerUserId, liked_user_id: likedProfileId };
-            
-            console.log('Inserting like:', likeData);
             const { error: insertError } = await supabase.from('likes').insert([likeData]);
 
             if (insertError) {
-                if (insertError.code === '23505') { // Unique violation (already liked)
-                    console.warn(`Like already exists for profile ${likedProfileId}`);
+                if (insertError.code === '23505') {
                     Alert.alert("Already Liked", `You've already liked ${profiles.find(p => p.id === likedProfileId)?.first_name || 'this profile'}.`);
                 } else {
-                    // Throw other insert errors to be caught by the generic catch block
                     throw new Error(`Failed to insert like: ${insertError.message} (Code: ${insertError.code})`);
                 }
             } else {
-                console.log(`Successfully liked profile ${likedProfileId}`);
                 Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
             }
         } catch (err: any) {
@@ -157,7 +183,14 @@ export default function ProfileBrowseScreen() {
             Alert.alert("Error Liking Profile", err.message || "Could not record like. Please try again.");
         }
     }, [user, profiles]);
-    // --- END OF MODIFIED LIKING LOGIC ---
+
+    // Dynamic header style using insets
+    const headerDynamicStyle = {
+        paddingTop: insets.top + styles.headerContainer.paddingVertical, // Add top inset to base vertical padding
+        paddingBottom: styles.headerContainer.paddingVertical, // Keep base bottom vertical padding
+        paddingLeft: insets.left + styles.headerContainer.paddingHorizontal, // Add left inset to base horizontal padding
+        paddingRight: insets.right + styles.headerContainer.paddingHorizontal, // Add right inset to base horizontal padding
+    };
 
     if (!user && !loading) {
         return (
@@ -168,16 +201,20 @@ export default function ProfileBrowseScreen() {
             </SafeAreaView>
         );
     }
+
     if (loading) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <ActivityIndicator size="large" color="#FF6347" />
-                    <Text style={styles.loadingText}>Finding profiles...</Text>
+                    <Text style={styles.loadingText}>
+                        {user && profiles.length === 0 && !error ? 'Finding profiles...' : 'Processing...'}
+                    </Text>
                 </View>
             </SafeAreaView>
         );
     }
+
     if (error) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
@@ -188,14 +225,28 @@ export default function ProfileBrowseScreen() {
             </SafeAreaView>
         );
     }
-    if (profiles.length === 0 && user) {
+
+    if (user && !loading && profiles.length === 0) {
         return (
-            <SafeAreaView style={styles.safeAreaSolidBackground}>
-                <View style={styles.centeredMessageContainer}>
+            <LinearGradient
+                colors={['#FF6B6B', '#FFD166']}
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.gradientFullScreen}
+            >
+                <View style={[styles.headerContainer, headerDynamicStyle]}>
+                    <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
+                        <Text style={styles.headerButtonText}>Edit Profile</Text>
+                    </Pressable>
+                    <Pressable onPress={handleLogout} style={[styles.headerButton, styles.headerButtonRight]}>
+                        <Text style={styles.headerButtonText}>Logout</Text>
+                    </Pressable>
+                </View>
+                <View style={styles.centeredMessageContainerOnGradient}>
                     <Text style={styles.infoText}>No other profiles found yet. Check back soon!</Text>
                     <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
                 </View>
-            </SafeAreaView>
+            </LinearGradient>
         );
     }
 
@@ -203,15 +254,24 @@ export default function ProfileBrowseScreen() {
 
     return (
         <LinearGradient
-            colors={['#FF6B6B', '#FFD166']}
+            colors={['#fe9494', '#00008b']}
             start={{ x: 0, y: 0.5 }}
             end={{ x: 1, y: 0.5 }}
             style={styles.gradientFullScreen}
         >
+            <View style={[styles.headerContainer, headerDynamicStyle]}>
+                <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
+                    <Text style={styles.headerButtonText}>Edit Profile</Text>
+                </Pressable>
+                <Pressable onPress={handleLogout} style={[styles.headerButton, styles.headerButtonRight]}>
+                    <Text style={styles.headerButtonText}>Logout</Text>
+                </Pressable>
+            </View>
+
             {currentProfile ? (
                 <ProfileCard
                     profile={currentProfile}
-                    onLike={handleLikeProfile} // This now uses the updated logic
+                    onLike={handleLikeProfile}
                     isVisible={true}
                     onRequestNextProfile={goToNextProfile}
                     onRequestPrevProfile={goToPrevProfile}
@@ -224,8 +284,9 @@ export default function ProfileBrowseScreen() {
                 )
             )}
 
-            {/* Progress bars overlay, shown only when there are profiles and a current profile exists */}
             {profiles.length > 0 && currentProfile && (
+                // This SafeAreaView ensures progress bars are not under system UI if they were at the very top/bottom edge
+                // Its main purpose here is to provide a positioned container for the absolutely positioned progress bars.
                 <SafeAreaView style={styles.progressSafeArea}>
                     <View style={styles.progressBarsContainer}>
                         {profiles.map((_, index) => (
@@ -248,22 +309,49 @@ const styles = StyleSheet.create({
     gradientFullScreen: {
         flex: 1,
     },
-    safeAreaSolidBackground: { 
+    // headerSafeArea style is no longer needed as we apply insets directly
+    headerContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 15, // Base horizontal padding
+        paddingVertical: -6,   // <<<< INCREASED base vertical padding for a slightly taller header (was 10)
+        minHeight: 40,         // Content height for buttons
+        zIndex: 20,            // Ensure header is above other content
+        // The actual paddingTop, Left, Right will be dynamically set using insets
+    },
+    headerButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.25)',
+    },
+    headerButtonLeft: {},
+    headerButtonRight: {},
+    headerButtonText: {
+        color: 'white',
+        fontSize: 14,
+        fontWeight: '600',
+        textShadowColor: 'rgba(0, 0, 0, 0.2)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 1,
+    },
+    safeAreaSolidBackground: {
         flex: 1,
         backgroundColor: '#1c1c1e',
     },
-    centeredMessageContainer: { // For loading/error/login states on solid background
+    centeredMessageContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
     },
-    centeredMessageContainerOnGradient: { // For "No profile to display" on gradient background
-        flex: 1, // Takes up space if ProfileCard isn't rendered
+    centeredMessageContainerOnGradient: {
+        flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
-        backgroundColor: 'transparent', // Ensures gradient shows through
+        backgroundColor: 'transparent',
     },
     loadingText: {
         marginTop: 10,
@@ -279,40 +367,51 @@ const styles = StyleSheet.create({
     infoText: {
         textAlign: 'center',
         fontSize: 16,
-        color: '#d3d3d3', // Consider a lighter color if on dark gradient, or keep as is
+        color: 'white',
         paddingHorizontal: 20,
         marginBottom: 20,
+        textShadowColor: 'rgba(0, 0, 0, 0.3)',
+        textShadowOffset: { width: 0, height: 1 },
+        textShadowRadius: 2,
     },
     button: {
         marginTop: 10,
-        paddingVertical: 10,
-        paddingHorizontal: 20,
+        paddingVertical: 12,
+        paddingHorizontal: 25,
         backgroundColor: '#FF6347',
-        borderRadius: 5,
+        borderRadius: 25,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.25,
+        shadowRadius: 3.84,
+        elevation: 5,
     },
     buttonText: {
         color: 'white',
         fontSize: 16,
         fontWeight: 'bold',
     },
-    progressSafeArea: { // SafeAreaView for progress bars, positioned absolutely
+    progressSafeArea: { // This SafeAreaView contains the progress bars
         position: 'absolute',
-        top: 0,
+        top: 0, // It's placed at the top of the LinearGradient
         left: 0,
         right: 0,
-        zIndex: 10, // Ensures progress bars are on top of ProfileCard
+        zIndex: 10,
+        // Its content (progressBarsContainer) will inherently respect insets.top due to being inside a SafeAreaView
     },
-    progressBarsContainer: { // Container for the actual progress bar segments
+    progressBarsContainer: {
         flexDirection: 'row',
-        height: 3,
-        marginHorizontal: 10, // Spacing from screen edges for the group of bars
-        gap: 4,             // Spacing between individual bar segments
-        marginTop: 55,      // Spacing from the top edge of the SafeAreaView content area
+        height: 4,
+        marginHorizontal: 10,
+        gap: 4,
+        // The new base header height: minHeight (40) + paddingVertical*2 (15*2=30) = 70px.
+        // This marginTop is from the top of the content area of progressSafeArea (which already accounts for system status bar).
+        marginTop: 70 + 15, // Base header height (70) + desired gap (15) = 85
     },
     progressBarSegment: {
         flex: 1,
         height: '100%',
-        borderRadius: 1.5,
+        borderRadius: 2,
     },
     progressBarSegmentActive: {
         backgroundColor: 'rgba(255, 255, 255, 0.9)',
