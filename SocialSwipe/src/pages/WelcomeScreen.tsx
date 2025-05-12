@@ -115,10 +115,10 @@ const slides: WelcomeSlide[] = [
 // Props for the WelcomeScreen component
 interface WelcomeScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WelcomeScreen'>;
-  onWelcomeComplete: () => Promise<void>;
+  // onWelcomeComplete: () => Promise<void>; // Removed: No longer passed from App.tsx
 }
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation, onWelcomeComplete }) => {
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => { // Removed onWelcomeComplete from destructured props
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
@@ -142,9 +142,9 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation, onWelcomeComp
   };
 
   const handleSignUp = async () => {
-    await onWelcomeComplete();
+    // await onWelcomeComplete(); // Removed: This was causing the error as it's no longer passed
     if (navigation && navigation.navigate) {
-      navigation.navigate('CreateAccount');
+      navigation.navigate('CreateAccount'); // This should now execute
     } else {
       console.warn('WelcomeScreen: Navigation prop is not available or navigate function is missing.');
     }
@@ -340,15 +340,11 @@ const styles = StyleSheet.create({
     minWidth: SCREEN_WIDTH * 0.7,
     height: 50,
     overflow: 'hidden', // Crucial for borderRadius to clip the LinearGradient child
-    // Removed: backgroundColor, paddingVertical, paddingHorizontal, alignItems, justifyContent
-    // These are now handled by buttonGradientWrapper or are inherent to its new structure
     alignItems: 'center', // Center the LinearGradient if its minWidth is less than TouchableOpacity's width
     justifyContent: 'center', // Center the LinearGradient if its minHeight is less than TouchableOpacity's height
   },
-  signUpButton: { // Style for the SignUp button's TouchableOpacity (if it needs specific layout overrides)
-    // backgroundColor: '#34C759', // Removed as gradient is used
+  signUpButton: {
     // Add any specific layout adjustments for the sign-up button's TouchableOpacity here
-    // For example, if it needed a different width: minWidth: SCREEN_WIDTH * 0.8,
   },
   buttonGradientWrapper: { // Style for the LinearGradient component inside the button
     width: '100%', // Make the gradient fill the TouchableOpacity
