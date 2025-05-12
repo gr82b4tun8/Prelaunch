@@ -25,7 +25,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 // Optional: Define your Navigation Stack parameter list for type safety
 // type RootStackParamList = {
 //   CreateAccount: undefined; // No params expected for CreateAccount itself
-//   AuthPage: undefined;     // No params expected for AuthPage
+//   AuthPage: undefined;      // No params expected for AuthPage
 //   // ... other screens
 // };
 
@@ -41,15 +41,15 @@ export default function CreateAccount() {
   const navigation = useNavigation(); // Optional: Use typed hook: useNavigation<CreateAccountScreenNavigationProp>();
 
   const [email, setEmail] = useState('');
-  const [username, setUsername] = useState('');
+  // const [username, setUsername] = useState(''); // USERNAME STATE REMOVED
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleSignUp = async () => {
     let isValid = true;
-    // --- (Validation logic remains the same) ---
+    // --- Validation logic ---
     if (!email) isValid = false;
-    if (!username || username.length < 3) isValid = false;
+    // if (!username || username.length < 3) isValid = false; // USERNAME VALIDATION REMOVED
     if (!password) isValid = false;
 
     if (!isValid) {
@@ -62,11 +62,11 @@ export default function CreateAccount() {
       const { data, error } = await supabase.auth.signUp({
         email: email.trim(),
         password: password,
-        options: {
-          data: {
-            username: username.trim(),
-          },
-        },
+        // options: { // USERNAME OPTION REMOVED
+        //   data: {
+        //     username: username.trim(),
+        //   },
+        // },
       });
 
       if (error) {
@@ -75,31 +75,31 @@ export default function CreateAccount() {
       } else if (data.user) {
         // SUCCESS CONDITION
         if (data.session) {
-           // User signed up and is logged in (e.g., email verification disabled)
-           Alert.alert(
-             'Success!',
-             'Account created successfully. Redirecting to login...',
-             [ // Add button in alert to acknowledge before navigating
+            // User signed up and is logged in (e.g., email verification disabled)
+            Alert.alert(
+              'Success!',
+              'Account created successfully. Redirecting to login...',
+              [ // Add button in alert to acknowledge before navigating
                 { text: "OK", onPress: () => navigation.navigate('AuthPage') } // Navigate on OK press
-             ]
-           );
+              ]
+            );
         } else {
-           // User signed up but needs verification (e.g., email verification enabled)
-           Alert.alert(
-             'Success!',
-             'Account created. Please check your email for verification, then login. Redirecting to login...',
-             [ // Add button in alert to acknowledge before navigating
+            // User signed up but needs verification (e.g., email verification enabled)
+            Alert.alert(
+              'Success!',
+              'Account created. Please check your email for verification, then login. Redirecting to login...',
+              [ // Add button in alert to acknowledge before navigating
                 { text: "OK", onPress: () => navigation.navigate('AuthPage') } // Navigate on OK press
-             ]
-           );
+              ]
+            );
         }
-         // Clear fields after successful signup attempt
-         setEmail('');
-         setUsername('');
-         setPassword('');
+        // Clear fields after successful signup attempt
+        setEmail('');
+        // setUsername(''); // CLEARING USERNAME STATE REMOVED
+        setPassword('');
 
       } else {
-         Alert.alert('Sign Up Error', 'An unexpected issue occurred during sign up.');
+          Alert.alert('Sign Up Error', 'An unexpected issue occurred during sign up.');
       }
     } catch (e: any) {
       console.error('Sign up exception:', e);
@@ -111,7 +111,7 @@ export default function CreateAccount() {
 
   // Function to navigate to Login (can still be used by the link)
   const goToLogin = () => {
-       navigation.navigate('AuthPage'); // Use navigate here too
+      navigation.navigate('AuthPage'); // Use navigate here too
   };
 
 
@@ -154,7 +154,7 @@ export default function CreateAccount() {
                 />
               </View>
 
-              {/* Username Input */}
+              {/* USERNAME INPUT REMOVED
               <View style={styles.inputGroup}>
                 <Text style={styles.label}>Username</Text>
                 <TextInput
@@ -166,6 +166,7 @@ export default function CreateAccount() {
                   placeholderTextColor="#aaa" // This color might need adjustment
                 />
               </View>
+              */}
 
               {/* Password Input */}
               <View style={styles.inputGroup}>
@@ -185,18 +186,18 @@ export default function CreateAccount() {
 
             <View style={styles.footer}>
               {/* Submit Button */}
-               <TouchableOpacity
+                <TouchableOpacity
                   style={[styles.button, styles.buttonPrimary, loading && styles.buttonDisabled]}
                   onPress={handleSignUp}
                   disabled={loading}
                   activeOpacity={0.8}
-               >
+                >
                   {loading ? (
                       <ActivityIndicator size="small" color="#ffffff" />
                   ) : (
                       <Text style={styles.buttonTextPrimary}>Create Account</Text>
                   )}
-               </TouchableOpacity>
+                </TouchableOpacity>
 
               {/* Link to Login */}
               <TouchableOpacity
