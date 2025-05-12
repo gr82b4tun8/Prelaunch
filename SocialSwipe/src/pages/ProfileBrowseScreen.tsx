@@ -5,7 +5,7 @@ import {
     Text,
     StyleSheet,
     ActivityIndicator,
-    SafeAreaView, // Still used for full-screen error/loading states and progress bars overlay
+    SafeAreaView,
     Alert,
     Pressable,
     Dimensions,
@@ -13,20 +13,32 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabaseClient';
-import { useApp } from '../../App';
+// import { useApp } from '../../App'; // <<<< REMOVED OLD IMPORT
+import { useApp } from '../contexts/AppContext'; // <<<< MODIFIED: Import from new context file (adjust path if your context is elsewhere)
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // <<<< ADDED IMPORT
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import ProfileCard, { Profile } from '../components/ProfileCard';
+import ProfileCard, { Profile } from '../components/ProfileCard'; // Assuming Profile type is compatible or defined appropriately
 
-type RootStackParamList = {
-    ProfileBrowse: undefined;
+// It's good practice for this RootStackParamList to match the one in App.tsx if it refers to the same navigator.
+// Or be a subset if this screen can only navigate to a few specific screens.
+// For consistency with App.tsx's navigator:
+type ProfileBrowseScreenStackParamList = {
+    // Use 'ProfileBrowseScreen' if that's the route name in the main navigator
+    // For self-reference in type, 'ProfileBrowse' is fine if only used for this screen's prop type definition.
+    // However, for navigation.navigate calls, use exact route names from App.tsx.
+    ProfileBrowseScreen: undefined; // Changed from 'ProfileBrowse' for consistency with App.tsx if navigating from itself
     EditProfileScreen: undefined;
-    WelcomeScreen: undefined;
+    WelcomeScreen: undefined; // Or other screens it can navigate to
 };
 
-type ProfileBrowseScreenNavigationProp = StackNavigationProp<RootStackParamList, 'ProfileBrowse'>;
+// Using the ParamList from App.tsx would be more robust if this screen is part of that Stack.
+// import { RootStackParamList } from '../../App'; // If RootStackParamList from App.tsx is exported and intended to be shared
+
+// For now, using a local type. Ensure 'EditProfileScreen' matches the name in App.tsx's RootStackParamList.
+type ProfileBrowseScreenNavigationProp = StackNavigationProp<ProfileBrowseScreenStackParamList, 'ProfileBrowseScreen'>;
+
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -47,12 +59,12 @@ interface FetchedUserProfileData {
 }
 
 export default function ProfileBrowseScreen() {
-    const { user } = useApp();
+    const { user, isLoadingSupabase } = useApp(); // Now using the imported useApp. isLoadingSupabase might be useful here.
     const navigation = useNavigation<ProfileBrowseScreenNavigationProp>();
-    const insets = useSafeAreaInsets(); // <<<< GET SAFE AREA INSETS
+    const insets = useSafeAreaInsets();
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(false); // This is for profiles fetching
     const [error, setError] = useState<string | null>(null);
 
     const handleLogout = async () => {
@@ -65,12 +77,14 @@ export default function ProfileBrowseScreen() {
                     text: "Logout",
                     style: "destructive",
                     onPress: async () => {
-                        setLoading(true);
+                        // setLoading(true); // You might want a different loading indicator for logout
                         const { error: signOutError } = await supabase.auth.signOut();
                         if (signOutError) {
                             Alert.alert("Logout Error", signOutError.message);
-                            setLoading(false);
+                            // setLoading(false);
                         }
+                        // No need to setLoading(false) here, as the auth state change
+                        // should trigger a re-render and navigation via RootNavigator
                     },
                 },
             ]
@@ -78,7 +92,13 @@ export default function ProfileBrowseScreen() {
     };
 
     const handleEditProfile = () => {
-        navigation.navigate('EditProfileScreen');
+        // Ensure user is still valid if needed, though context should be up-to-date
+        if (user) {
+            navigation.navigate('EditProfileScreen');
+        } else {
+            // This case should ideally be handled by RootNavigator redirecting to login
+            Alert.alert("Error", "You are not logged in.");
+        }
     };
 
     const getPublicImageUrl = useCallback((pathOrUrl: string | null | undefined): string | null => {
@@ -94,7 +114,11 @@ export default function ProfileBrowseScreen() {
     }, []);
 
     const fetchProfiles = useCallback(async () => {
-        if (!user) return;
+        if (!user) { // If no user from context, don't fetch
+            setProfiles([]); // Clear profiles
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
@@ -102,7 +126,7 @@ export default function ProfileBrowseScreen() {
                 .from('individual_profiles')
                 .select('user_id, first_name, last_name, date_of_birth, gender, bio, interests, location, looking_for, profile_pictures, created_at, updated_at, is_profile_complete')
                 .eq('is_profile_complete', true)
-                .neq('user_id', user.id)
+                .neq('user_id', user.id) // Use user.id from context
                 .limit(50);
 
             if (fetchError) throw fetchError;
@@ -144,17 +168,22 @@ export default function ProfileBrowseScreen() {
         } finally {
             setLoading(false);
         }
-    }, [user, getPublicImageUrl]);
+    }, [user, getPublicImageUrl]); // `user` from context is now a dependency
 
     useEffect(() => {
-        if (user) {
-            fetchProfiles();
-        } else {
-            setProfiles([]);
-            setCurrentIndex(0);
-            setError(null);
+        // Only fetch profiles if Supabase auth check is done AND user exists
+        if (!isLoadingSupabase) {
+            if (user) {
+                fetchProfiles();
+            } else {
+                // User is confirmed to be null (logged out or no session)
+                setProfiles([]);
+                setCurrentIndex(0);
+                setError(null);
+                setLoading(false); // Ensure loading is false
+            }
         }
-    }, [user, fetchProfiles]);
+    }, [user, isLoadingSupabase, fetchProfiles]);
 
     const goToNextProfile = useCallback(() => setCurrentIndex(prev => Math.min(prev + 1, profiles.length - 1)), [profiles.length]);
     const goToPrevProfile = useCallback(() => setCurrentIndex(prev => Math.max(prev - 1, 0)), []);
@@ -184,15 +213,28 @@ export default function ProfileBrowseScreen() {
         }
     }, [user, profiles]);
 
-    // Dynamic header style using insets
     const headerDynamicStyle = {
-        paddingTop: insets.top + styles.headerContainer.paddingVertical, // Add top inset to base vertical padding
-        paddingBottom: styles.headerContainer.paddingVertical, // Keep base bottom vertical padding
-        paddingLeft: insets.left + styles.headerContainer.paddingHorizontal, // Add left inset to base horizontal padding
-        paddingRight: insets.right + styles.headerContainer.paddingHorizontal, // Add right inset to base horizontal padding
+        paddingTop: insets.top + styles.headerContainer.paddingVertical,
+        paddingBottom: styles.headerContainer.paddingVertical,
+        paddingLeft: insets.left + styles.headerContainer.paddingHorizontal,
+        paddingRight: insets.right + styles.headerContainer.paddingHorizontal,
     };
 
-    if (!user && !loading) {
+    // Render a loading state if Supabase is still authenticating
+    if (isLoadingSupabase) {
+        return (
+            <SafeAreaView style={styles.safeAreaSolidBackground}>
+                <View style={styles.centeredMessageContainer}>
+                    <ActivityIndicator size="large" color="#FF6347" />
+                    <Text style={styles.loadingText}>Checking session...</Text>
+                </View>
+            </SafeAreaView>
+        );
+    }
+
+    // If Supabase auth is done and there's no user, RootNavigator should handle redirect.
+    // This screen might briefly render this if logic is complex, or if user logs out.
+    if (!user) { // `loading` here refers to profile loading, not auth loading
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
@@ -202,13 +244,14 @@ export default function ProfileBrowseScreen() {
         );
     }
 
-    if (loading) {
+    // User is authenticated, now check for profile loading state
+    if (loading) { // This `loading` is for fetching profiles
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <ActivityIndicator size="large" color="#FF6347" />
                     <Text style={styles.loadingText}>
-                        {user && profiles.length === 0 && !error ? 'Finding profiles...' : 'Processing...'}
+                        {profiles.length === 0 && !error ? 'Finding profiles...' : 'Processing...'}
                     </Text>
                 </View>
             </SafeAreaView>
@@ -226,7 +269,7 @@ export default function ProfileBrowseScreen() {
         );
     }
 
-    if (user && !loading && profiles.length === 0) {
+    if (user && !loading && profiles.length === 0) { // User exists, not loading profiles, but no profiles found
         return (
             <LinearGradient
                 colors={['#FF6B6B', '#FFD166']}
@@ -252,6 +295,33 @@ export default function ProfileBrowseScreen() {
 
     const currentProfile = profiles[currentIndex];
 
+    // This should ideally not be reached if !currentProfile due to the above conditions,
+    // but as a fallback:
+    if (!currentProfile && !loading) {
+         return (
+            <LinearGradient
+                colors={['#fe9494', '#00008b']} // Or a "no profiles" gradient
+                start={{ x: 0, y: 0.5 }}
+                end={{ x: 1, y: 0.5 }}
+                style={styles.gradientFullScreen}
+            >
+                <View style={[styles.headerContainer, headerDynamicStyle]}>
+                     <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
+                        <Text style={styles.headerButtonText}>Edit Profile</Text>
+                    </Pressable>
+                    <Pressable onPress={handleLogout} style={[styles.headerButton, styles.headerButtonRight]}>
+                        <Text style={styles.headerButtonText}>Logout</Text>
+                    </Pressable>
+                </View>
+                <View style={styles.centeredMessageContainerOnGradient}>
+                    <Text style={styles.infoText}>No profile to display.</Text>
+                    <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
+                </View>
+            </LinearGradient>
+        );
+    }
+
+
     return (
         <LinearGradient
             colors={['#fe9494', '#00008b']}
@@ -268,7 +338,7 @@ export default function ProfileBrowseScreen() {
                 </Pressable>
             </View>
 
-            {currentProfile ? (
+            {currentProfile && ( // Ensure currentProfile exists before rendering ProfileCard
                 <ProfileCard
                     profile={currentProfile}
                     onLike={handleLikeProfile}
@@ -276,17 +346,9 @@ export default function ProfileBrowseScreen() {
                     onRequestNextProfile={goToNextProfile}
                     onRequestPrevProfile={goToPrevProfile}
                 />
-            ) : (
-                !loading && (
-                    <View style={styles.centeredMessageContainerOnGradient}>
-                        <Text style={styles.infoText}>No profile to display.</Text>
-                    </View>
-                )
             )}
 
             {profiles.length > 0 && currentProfile && (
-                // This SafeAreaView ensures progress bars are not under system UI if they were at the very top/bottom edge
-                // Its main purpose here is to provide a positioned container for the absolutely positioned progress bars.
                 <SafeAreaView style={styles.progressSafeArea}>
                     <View style={styles.progressBarsContainer}>
                         {profiles.map((_, index) => (
@@ -309,16 +371,14 @@ const styles = StyleSheet.create({
     gradientFullScreen: {
         flex: 1,
     },
-    // headerSafeArea style is no longer needed as we apply insets directly
     headerContainer: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        paddingHorizontal: 15, // Base horizontal padding
-        paddingVertical: -20,   // <<<< INCREASED base vertical padding for a slightly taller header (was 10)
-        minHeight: 100,         // Content height for buttons
-        zIndex: 20,            // Ensure header is above other content
-        // The actual paddingTop, Left, Right will be dynamically set using insets
+        paddingHorizontal: 15,
+        paddingVertical: -20, 
+        minHeight: 100,
+        zIndex: 20,
     },
     headerButton: {
         paddingVertical: 8,
@@ -391,22 +451,19 @@ const styles = StyleSheet.create({
         fontSize: 16,
         fontWeight: 'bold',
     },
-    progressSafeArea: { // This SafeAreaView contains the progress bars
+    progressSafeArea: {
         position: 'absolute',
-        top: 0, // It's placed at the top of the LinearGradient
+        top: 0,
         left: 0,
         right: 0,
         zIndex: 10,
-        // Its content (progressBarsContainer) will inherently respect insets.top due to being inside a SafeAreaView
     },
     progressBarsContainer: {
         flexDirection: 'row',
         height: 4,
         marginHorizontal: 10,
         gap: 4,
-        // The new base header height: minHeight (40) + paddingVertical*2 (15*2=30) = 70px.
-        // This marginTop is from the top of the content area of progressSafeArea (which already accounts for system status bar).
-        marginTop: 70 + 35, // Base header height (70) + desired gap (15) = 85
+        marginTop: 70 + 35, 
     },
     progressBarSegment: {
         flex: 1,

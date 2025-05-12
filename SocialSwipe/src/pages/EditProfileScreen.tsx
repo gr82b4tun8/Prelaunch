@@ -1,3 +1,4 @@
+// src/pages/EditProfileScreen.tsx
 // CONVERTED for React Native / Expo Go
 // Includes ArrayBuffer fix for image upload
 // Corrected Supabase table name for update operation
@@ -15,7 +16,12 @@ import { useNavigation } from '@react-navigation/native';
 // Assuming you have a type definition for your stack navigator
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabaseClient'; // Adjust path
-import { useAuth } from '../contexts/AuthContext'; // Adjust path
+
+// ***** MODIFICATION START *****
+// import { useAuth } from '../contexts/AuthContext'; // <<<< REMOVE THIS
+import { useApp } from '../contexts/AppContext'; // <<<< ADD THIS (Adjust path if necessary)
+// ***** MODIFICATION END *****
+
 import { v4 as uuidv4 } from 'uuid'; // Ensure uuid is installed
 import 'react-native-get-random-values'; // Ensure polyfill is imported (usually in App.tsx)
 import * as ImagePicker from 'expo-image-picker';
@@ -57,10 +63,11 @@ interface Profile {
 }
 
 // Define your Navigation Stack Param List if not done globally
-// Ensure this matches the navigator where EditProfile resides
+// Ensure this matches the navigator where EditProfile resides.
+// 'WelcomeScreen' should be a valid target from your main App.tsx navigator.
 type YourSpecificNavigatorParamList = {
     ProfileTab: undefined; // Example name for the profile tab screen
-    Login: undefined;
+    WelcomeScreen: undefined; // <<<< Ensure this is a valid target or use the correct one from App.tsx
     EditProfile: undefined; // Current screen
     // ... other screens in this specific navigator
 };
@@ -69,8 +76,17 @@ type EditProfileScreenNavigationProp = NativeStackNavigationProp<YourSpecificNav
 
 const EditProfileScreen: React.FC = () => {
     const navigation = useNavigation<EditProfileScreenNavigationProp>();
-    const { user, loading: authLoading } = useAuth(); // Assuming useAuth provides user object with id
-    const [initialLoading, setInitialLoading] = useState(true);
+
+    // ***** MODIFICATION START *****
+    // const { user, loading: authLoading } = useAuth(); // <<<< REMOVE THIS
+    const { user, isLoadingSupabase, profile: contextProfile, fetchProfile } = useApp(); // <<<< ADD THIS
+    // `isLoadingSupabase` from AppContext will be used instead of `authLoading`
+    // `contextProfile` can be used to potentially pre-fill or verify data if needed,
+    // though your existing fetch logic in this screen might be sufficient.
+    // `WorkspaceProfile` from AppContext can be used to refresh the global profile state after an update.
+    // ***** MODIFICATION END *****
+
+    const [initialLoading, setInitialLoading] = useState(true); // This is for this screen's own data fetching
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     // --- State ---
@@ -92,13 +108,16 @@ const EditProfileScreen: React.FC = () => {
 
     // --- Fetch Existing Profile Data ---
     useEffect(() => {
-        if (!authLoading && user) {
+        // ***** MODIFICATION START *****
+        // Use `isLoadingSupabase` from `useApp()`
+        if (!isLoadingSupabase && user) {
+        // ***** MODIFICATION END *****
             const fetchProfileData = async () => {
                 setInitialLoading(true);
-                console.log("[EditProfile] Fetching profile data...");
+                console.log("[EditProfile] Fetching profile data for user:", user.id); // Log with user ID
                 try {
                     const { data, error, status } = await supabase
-                        .from('individual_profiles') // <<< CORRECT: Fetching from individual_profiles
+                        .from('individual_profiles')
                         .select('*')
                         .eq('user_id', user.id)
                         .single();
@@ -121,27 +140,40 @@ const EditProfileScreen: React.FC = () => {
                         console.log("[EditProfile] Profile data loaded into form.");
                     } else {
                         console.warn("[EditProfile] No profile data found for user.");
-                        Toast.show({ type: 'info', text1: 'Profile not found', text2: 'Please create a profile first.' });
-                        navigation.goBack();
+                        Toast.show({ type: 'info', text1: 'Profile not found', text2: 'You might need to create it first.' });
+                        // Optional: Consider if a new profile should be created here or navigate to CreateProfile
+                        // For now, we assume an existing profile should be editable.
+                        // If navigation.canGoBack(), it will just stay, allowing form fill for a new profile
+                        // if this screen is also for creation. If not, goBack makes sense.
+                         if (navigation.canGoBack()) {
+                             navigation.goBack();
+                         }
                     }
                 } catch (error: any) {
                     console.error("[EditProfile] Failed to fetch profile data:", error);
                     Toast.show({ type: 'error', text1: 'Failed to load data', text2: error.message });
-                    navigation.goBack();
+                    if (navigation.canGoBack()) {
+                        navigation.goBack();
+                    }
                 } finally {
                     setInitialLoading(false);
-                    console.log("[EditProfile] Finished initial loading.");
+                    console.log("[EditProfile] Finished initial loading sequence.");
                 }
             };
             fetchProfileData();
-        } else if (!authLoading && !user) {
-            console.log("[EditProfile] No user session, navigating to Login.");
-            // Ensure 'Login' exists in YourSpecificNavigatorParamList or adjust as needed
-            navigation.navigate('Login' as any); // Using 'as any' for simplicity if types differ
+        // ***** MODIFICATION START *****
+        // Use `isLoadingSupabase` from `useApp()`
+        } else if (!isLoadingSupabase && !user) {
+        // ***** MODIFICATION END *****
+            console.log("[EditProfile] No user session (from AppContext), navigating to WelcomeScreen.");
+            navigation.navigate('WelcomeScreen'); // Or replace with 'AuthPage' if direct login is preferred
         }
-    }, [user, authLoading, reset, navigation]);
+    // ***** MODIFICATION START *****
+    // Update dependencies for useEffect
+    }, [user, isLoadingSupabase, reset, navigation]);
+    // ***** MODIFICATION END *****
 
-    // --- Image Handling ---
+    // --- Image Handling --- (Keep as is)
     const pickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -150,34 +182,27 @@ const EditProfileScreen: React.FC = () => {
         }
 
         const currentTotal = currentProfilePictures.length + newImageAssets.length;
-        // Use the constant
         if (currentTotal >= MAX_PROFILE_PHOTOS) {
             Toast.show({ type: 'info', text1: 'Limit Reached', text2: `Max ${MAX_PROFILE_PHOTOS} photos allowed.` });
             return;
         }
 
         try {
-            const selectionLimit = MAX_PROFILE_PHOTOS - currentTotal; // Calculate remaining slots
+            const selectionLimit = MAX_PROFILE_PHOTOS - currentTotal;
             let result = await ImagePicker.launchImageLibraryAsync({
                 mediaTypes: ImagePicker.MediaTypeOptions.Images,
                 allowsMultipleSelection: true,
                 quality: 0.8,
-                selectionLimit: selectionLimit, // Use calculated limit
+                selectionLimit: selectionLimit > 0 ? selectionLimit : 1,
             });
-
-            console.log('[EditProfile] ImagePicker result:', JSON.stringify(result, null, 2));
 
             if (!result.canceled && result.assets) {
                 const combined = [...newImageAssets, ...result.assets];
-                // Slice based on the *overall* limit, considering existing photos
                 const limitedNewAssets = combined.slice(0, MAX_PROFILE_PHOTOS - currentProfilePictures.length);
                 if (combined.length > limitedNewAssets.length) {
                     Toast.show({ type: 'info', text1: 'Limit Exceeded', text2: `Selected images exceed the limit of ${MAX_PROFILE_PHOTOS}.` });
                 }
                 setNewImageAssets(limitedNewAssets);
-                console.log(`[EditProfile] Added ${result.assets.length} new image assets. Total new: ${limitedNewAssets.length}`);
-            } else {
-                console.log("[EditProfile] Image picking cancelled or no assets selected.");
             }
         } catch (pickerError) {
             console.error("[EditProfile] Error launching image picker:", pickerError);
@@ -186,31 +211,25 @@ const EditProfileScreen: React.FC = () => {
     };
 
     const removeImage = (uriToRemove: string) => {
-        // Check if it's an existing image URL
         const existingIndex = currentProfilePictures.indexOf(uriToRemove);
         if (existingIndex > -1) {
-            // Remove from the list of existing URLs (will be removed on save)
             setCurrentProfilePictures(prev => prev.filter(url => url !== uriToRemove));
-            console.log(`[EditProfile] Marked existing image for removal (will be removed on save): ${uriToRemove}`);
         } else {
-            // Remove from the list of newly selected assets
             setNewImageAssets(prev => prev.filter(asset => asset.uri !== uriToRemove));
-            console.log(`[EditProfile] Removed new image asset: ${uriToRemove}`);
         }
     };
 
-    // Combined list for rendering purposes
     const allImageUris = [
         ...currentProfilePictures,
         ...newImageAssets.map(asset => asset.uri)
     ];
 
-    // --- Interest Handling --- (Keep as is - Assuming they work)
+    // --- Interest Handling --- (Keep as is)
     const addInterest = useCallback(() => {
         const trimmedInterest = interestInput.trim();
         if (trimmedInterest && interests.length < 10 && !interests.includes(trimmedInterest)) {
             setInterests(prev => [...prev, trimmedInterest]);
-            setInterestInput(''); // Clear input after adding
+            setInterestInput('');
         } else if (interests.includes(trimmedInterest)) {
             Toast.show({ type: 'info', text1: 'Interest already added.' });
         } else if (interests.length >= 10) {
@@ -222,16 +241,13 @@ const EditProfileScreen: React.FC = () => {
         setInterests(prev => prev.filter(interest => interest !== interestToRemove));
     }, []);
 
-
-    // --- Date Picker --- (Keep as is - Assuming they work)
+    // --- Date Picker --- (Keep as is)
     const showDatePicker = () => setDatePickerVisibility(true);
     const hideDatePicker = () => setDatePickerVisibility(false);
     const handleDateConfirm = useCallback((date: Date, onChange: (date: Date) => void) => {
-        // Double check if it's really today or later (accounting for timezones)
-        if (date >= startOfToday()) {
-             // Set to 18 years ago if today or future is selected
-             date = subYears(startOfToday(), 18);
-             Toast.show({type: 'info', text1: 'Invalid Date', text2: 'Setting to earliest valid date (18 years ago).'})
+        if (date > subYears(startOfToday(), 18)) {
+            date = subYears(startOfToday(), 18);
+            Toast.show({type: 'info', text1: 'Age Requirement', text2: 'Setting to earliest valid date (18+).'})
         }
         onChange(date);
         hideDatePicker();
@@ -240,10 +256,9 @@ const EditProfileScreen: React.FC = () => {
 
     // --- Form Submission Logic (UPDATE) ---
     const onSubmit = async (values: ProfileFormData) => {
-        if (!user) {
+        if (!user) { // user from useApp()
             Toast.show({ type: 'error', text1: 'User session not found.' }); return;
         }
-        // Use constant for check
         if (allImageUris.length === 0) {
             Toast.show({ type: 'error', text1: 'Missing Photos', text2: 'Please add at least one photo.'}); return;
         }
@@ -253,141 +268,118 @@ const EditProfileScreen: React.FC = () => {
         console.log("[EditProfile] Starting onSubmit...");
 
         try {
-            // --- 1. Upload NEW Images (Logic matches CreateBusinessProfile) ---
+            // --- 1. Upload NEW Images ---
             if (newImageAssets.length > 0) {
                 Toast.show({ type: 'info', text1: "Uploading new images..." });
-                console.log(`[EditProfile] Attempting to upload ${newImageAssets.length} new images.`);
-
                 for (const asset of newImageAssets) {
                     const uri = asset.uri;
-                    console.log(`[EditProfile] Processing asset URI: ${uri}`);
-
-                    // Fetch the image data
-                    console.log("[EditProfile] Attempting to fetch image URI...");
                     const response = await fetch(uri);
-                    console.log(`[EditProfile] Fetch status for ${uri}: ${response.status}, OK: ${response.ok}`);
-
-                    if (!response.ok) {
-                        let responseText = 'Could not read response body.';
-                        try { responseText = await response.text(); } catch {}
-                        console.error(`[EditProfile] Failed Fetch Response Body (limited): ${responseText.substring(0, 500)}`);
-                        throw new Error(`Failed to fetch image URI (${response.status}): ${response.statusText}`);
-                    }
-
-                    // Get ArrayBuffer directly from response
-                    console.log("[EditProfile] Getting ArrayBuffer directly from response...");
+                    if (!response.ok) throw new Error(`Failed to fetch image URI (${response.status})`);
                     const arrayBuffer = await response.arrayBuffer();
-                    console.log(`[EditProfile] ArrayBuffer size: ${arrayBuffer.byteLength}`);
+                    if (arrayBuffer.byteLength === 0) throw new Error("Cannot upload empty image file.");
 
-                    if (arrayBuffer.byteLength === 0) {
-                        console.error("[EditProfile] Error: Created an empty ArrayBuffer from the image URI!", { uri });
-                        throw new Error("Cannot upload empty image file. Please select a different image.");
-                    }
-
-                    // Get Content-Type from response HEADERS
-                    const contentType = response.headers.get('content-type') ?? 'application/octet-stream'; // Provide a default
-                    console.log(`[EditProfile] Content-Type from headers: ${contentType}`);
-
-                    // Determine file extension
-                    const fileExt = asset.fileName?.split('.').pop()?.toLowerCase() ?? uri.split('.').pop()?.toLowerCase() ?? 'jpg';
-                    const betterFileExt = contentType.split('/')[1]?.split('+')[0] ?? fileExt; // Handle things like image/svg+xml
-                    const fileName = `${uuidv4()}.${betterFileExt}`;
-                    // Original filePath construction - keeping it as is per instructions
+                    const contentType = response.headers.get('content-type') ?? asset.mimeType ?? 'application/octet-stream';
+                    const fileExtFromAsset = asset.fileName?.split('.').pop()?.toLowerCase();
+                    const fileExtFromUri = uri.split('.').pop()?.toLowerCase()?.split('?')[0];
+                    const fileExtFromMime = contentType.split('/')[1]?.split('+')[0];
+                    const fileExt = fileExtFromAsset || fileExtFromMime || fileExtFromUri || 'jpg';
+                    const fileName = `${uuidv4()}.${fileExt}`;
                     const filePath = `${user.id}/${fileName}`;
 
-                    // Upload to Supabase Storage
-                    console.log(`[EditProfile] Attempting Supabase upload (using ArrayBuffer) to path: ${filePath} with contentType: ${contentType}`);
                     const { error: uploadError, data: uploadData } = await supabase.storage
-                        .from('profile_pictures') // Bucket name confirmed as correct
-                        .upload(filePath, arrayBuffer, {
-                            contentType: contentType, // Pass content type from headers
-                            upsert: false // Don't overwrite existing files with same name
-                        });
+                        .from('profile_pictures')
+                        .upload(filePath, arrayBuffer, { contentType, upsert: false });
 
-                    if (uploadError) {
-                        console.error("[EditProfile] Supabase upload error:", uploadError);
-                        throw new Error(`Upload failed: ${uploadError.message}`);
-                    } else {
-                        console.log("[EditProfile] Supabase upload successful for:", filePath);
-                    }
-
-                    // Get Public URL
+                    if (uploadError) throw new Error(`Upload failed: ${uploadError.message}`);
+                    
                     const { data: urlData } = supabase.storage.from('profile_pictures').getPublicUrl(filePath);
                     if (!urlData?.publicUrl) {
-                        console.warn("[EditProfile] Could not get public URL for uploaded file:", filePath);
-                        // Don't throw error here, maybe proceed but log it
                         Toast.show({ type: 'warning', text1: 'URL Issue', text2: 'Could not get public URL for an image.'});
-                        // uploadedNewImageUrls.push(filePath); // Fallback? Or just skip? Let's skip for now.
                     } else {
-                       uploadedNewImageUrls.push(urlData.publicUrl);
-                       console.log("[EditProfile] Uploaded and got URL:", urlData.publicUrl);
+                        uploadedNewImageUrls.push(urlData.publicUrl);
                     }
-                } // End for loop
-                if (uploadedNewImageUrls.length === newImageAssets.length) {
-                  Toast.show({ type: 'success', text1: "New images uploaded!" });
-                } else {
-                  Toast.show({ type: 'warning', text1: "Some images uploaded", text2: "Check console for details." });
                 }
-            } else {
-                console.log("[EditProfile] No new images to upload.");
+                 if (uploadedNewImageUrls.length === newImageAssets.length) {
+                   Toast.show({ type: 'success', text1: "New images uploaded!" });
+                } else if (uploadedNewImageUrls.length > 0) {
+                    Toast.show({ type: 'warning', text1: "Some images uploaded", text2: "Not all new images could be processed." });
+                } else if (newImageAssets.length > 0 && uploadedNewImageUrls.length === 0) {
+                    Toast.show({ type: 'error', text1: "Image Upload Failed", text2: "None of the new images could be uploaded." });
+                }
             }
 
             // --- 2. Prepare Final Data ---
-            console.log("[EditProfile] Preparing final update data...");
-            // Combine remaining existing pictures with newly uploaded ones
             const finalImageUrls = [...currentProfilePictures, ...uploadedNewImageUrls];
             const profileUpdateData = {
                 first_name: values.firstName,
                 last_name: values.lastName || null,
-                date_of_birth: format(values.dob, 'yyyy-MM-dd'), // Format date correctly
+                date_of_birth: format(values.dob, 'yyyy-MM-dd'),
                 gender: values.gender,
                 bio: values.bio || null,
-                interests: interests, // Use the state variable
+                interests: interests,
                 location: values.location || null,
                 looking_for: values.lookingFor || null,
-                profile_pictures: finalImageUrls, // The combined list
-                updated_at: new Date().toISOString(), // Update timestamp
-                // user_id is used in .eq(), no need to update it here
+                profile_pictures: finalImageUrls.length > 0 ? finalImageUrls : null,
+                updated_at: new Date().toISOString(),
+                // Check if profile was incomplete and is now complete
+                is_profile_complete: true // Assuming editing implies completion or re-completion
             };
-            console.log("[EditProfile] Final update payload:", profileUpdateData);
 
             // --- 3. Update Profile Data in Supabase ---
             Toast.show({ type: 'info', text1: "Saving changes..." });
-            console.log("[EditProfile] Attempting Supabase profile update...");
-
-            // *** CRITICAL FIX: Update the correct table ***
             const { error: updateError } = await supabase
-                .from('individual_profiles') // <<< Use the correct table name
+                .from('individual_profiles')
                 .update(profileUpdateData)
-                .eq('user_id', user.id); // Match the user ID
+                .eq('user_id', user.id)
+                .select() // Add select to get the updated data back if needed
+                .single(); // Assuming one profile per user
 
-            if (updateError) {
-                console.error("[EditProfile] Supabase profile update error:", updateError);
-                throw updateError; // Let the catch block handle it
-            } else {
-                console.log("[EditProfile] Supabase profile update successful.");
-            }
+            if (updateError) throw updateError;
 
             // --- 4. Success ---
             Toast.show({ type: 'success', text1: 'Profile Updated!', text2: 'Your changes saved.' });
-            // Optional: Call refreshProfile in AuthContext if needed
-            // await refreshProfile?.();
-            setNewImageAssets([]); // Clear newly added assets state after successful save
-            navigation.goBack(); // Navigate back after success
+            setNewImageAssets([]);
+            setCurrentProfilePictures(finalImageUrls.length > 0 ? finalImageUrls : []);
+
+            // ***** MODIFICATION START *****
+            // Refresh the global profile state in AppContext
+            await fetchProfile(user.id);
+            // ***** MODIFICATION END *****
+
+            if (navigation.canGoBack()) {
+                navigation.goBack();
+            }
 
         } catch (error: any) {
             console.error('[EditProfile] Update Profile Error:', error);
             Toast.show({ type: 'error', text1: 'Update Failed', text2: error.message || 'An unexpected error occurred.' });
         } finally {
-            console.log("[EditProfile] Finishing onSubmit.");
-            setIsSubmitting(false); // Ensure loading state is turned off
+            setIsSubmitting(false);
         }
     };
 
     // --- Render ---
-    if (initialLoading || authLoading) {
+    // ***** MODIFICATION START *****
+    // Use `isLoadingSupabase` from `useApp()` for the initial auth check
+    // `initialLoading` is for this screen's specific data fetch.
+    if (isLoadingSupabase || initialLoading) {
+    // ***** MODIFICATION END *****
         return (<SafeAreaView style={styles.centered}><ActivityIndicator size="large" color="#FF6347" /></SafeAreaView>);
     }
+
+    // If, after auth check, there's still no user, this would have been handled by the useEffect redirect.
+    // However, as a fallback or if the redirect logic changes:
+    if (!user) {
+         return (
+            <SafeAreaView style={styles.centered}>
+                <Text>User not found. Please try logging in again.</Text>
+                <Pressable onPress={() => navigation.navigate('WelcomeScreen')} style={styles.button}>
+                    <Text style={styles.buttonText}>Go to Welcome</Text>
+                </Pressable>
+            </SafeAreaView>
+        );
+    }
+
 
     // Render Form using ScrollView
     return (
@@ -414,7 +406,6 @@ const EditProfileScreen: React.FC = () => {
                         <Controller name="lastName" control={control} render={({ field: { onChange, onBlur, value } }) => (
                             <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="Enter last name" editable={!isSubmitting} />
                         )} />
-                        {/* No error shown for optional field */}
                     </View>
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Date of Birth*</Text>
@@ -429,8 +420,8 @@ const EditProfileScreen: React.FC = () => {
                                 <DateTimePickerModal
                                     isVisible={isDatePickerVisible}
                                     mode="date"
-                                    date={value || subYears(startOfToday(), 18)} // Default selection
-                                    maximumDate={subYears(startOfToday(), 18)} // Max date is 18 years ago
+                                    date={value || subYears(startOfToday(), 18)}
+                                    maximumDate={subYears(startOfToday(), 18)}
                                     onConfirm={(date) => handleDateConfirm(date, onChange)}
                                     onCancel={hideDatePicker}
                                 />
@@ -441,14 +432,15 @@ const EditProfileScreen: React.FC = () => {
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Gender*</Text>
                         <Controller name="gender" control={control} render={({ field: { onChange, value } }) => (
-                            // TODO: Replace with an actual Picker component (e.g., @react-native-picker/picker or a custom modal)
                             <View style={styles.pickerPlaceholder}>
-                                <Text style={value ? styles.pickerText : styles.placeholderText}>
-                                     {value || 'Select Gender (Replace with Picker)'}
-                                </Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="Select Gender (e.g., Male, Female, Other)"
+                                    value={value}
+                                    onChangeText={onChange}
+                                    editable={!isSubmitting}
+                                />
                             </View>
-                            // Example using TextInput for now:
-                            // <TextInput style={styles.input} onChangeText={onChange} value={value} placeholder="Select Gender (Use Picker)" editable={!isSubmitting} />
                         )} />
                         {errors.gender && <Text style={styles.errorText}>{errors.gender.message}</Text>}
                     </View>
@@ -493,140 +485,123 @@ const EditProfileScreen: React.FC = () => {
                         <Controller name="location" control={control} render={({ field: { onChange, onBlur, value } }) => (
                             <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="e.g., Miami, FL" editable={!isSubmitting} />
                         )} />
-                        {/* No error shown for optional field */}
                     </View>
                     <View style={styles.inputGroup}>
                         <Text style={styles.label}>Looking For</Text>
                         <Controller name="lookingFor" control={control} render={({ field: { onChange, value } }) => (
-                             // TODO: Replace with an actual Picker component
                              <View style={styles.pickerPlaceholder}>
-                                 <Text style={value ? styles.pickerText : styles.placeholderText}>{value || 'Select Preference (Use Picker)'}</Text>
+                                <TextInput
+                                    style={styles.input}
+                                    placeholder="e.g. Friends, Relationship (Use Picker)"
+                                    value={value}
+                                    onChangeText={onChange}
+                                    editable={!isSubmitting}
+                                />
                              </View>
-                            // Example using TextInput for now:
-                            // <TextInput style={styles.input} onChangeText={onChange} value={value || ''} placeholder="Select Preference (Use Picker)" editable={!isSubmitting} />
                         )} />
-                         {/* No error shown for optional field */}
                     </View>
                 </View>
 
                 {/* Photos Section */}
                 <View style={styles.section}>
-                     <Text style={styles.sectionTitle}>Profile Pictures*</Text>
-                     <View style={styles.inputGroup}>
-                         {/* Use constant */}
-                         <Text style={styles.label}>Add or remove photos (up to {MAX_PROFILE_PHOTOS} total)</Text>
-                         <Pressable
-                             style={[styles.button, styles.outlineButton]}
-                             onPress={pickImage}
-                             // Use constant for disabling
-                             disabled={isSubmitting || allImageUris.length >= MAX_PROFILE_PHOTOS}
-                         >
-                             <Ionicons name="images-outline" size={18} color="#FF6347" style={{ marginRight: 8 }}/>
-                             <Text style={styles.outlineButtonText}>Select New Images</Text>
-                         </Pressable>
-                         {/* Error message if no photos at all */}
-                         {allImageUris.length === 0 && <Text style={styles.errorText}>Please add at least one photo.</Text>}
-                     </View>
-                     <View style={styles.imageGrid}>
-                         {/* Render combined list */}
-                         {allImageUris.map((uri) => (
-                             <View key={uri} style={styles.imageContainer}>
-                                 <Image source={{ uri: uri }} style={styles.imagePreview} />
-                                 <Pressable
+                    <Text style={styles.sectionTitle}>Profile Pictures*</Text>
+                    <View style={styles.inputGroup}>
+                        <Text style={styles.label}>Add or remove photos (up to {MAX_PROFILE_PHOTOS} total)</Text>
+                        <Pressable
+                            style={[styles.button, styles.outlineButton]}
+                            onPress={pickImage}
+                            disabled={isSubmitting || allImageUris.length >= MAX_PROFILE_PHOTOS}
+                        >
+                            <Ionicons name="images-outline" size={18} color="#FF6347" style={{ marginRight: 8 }}/>
+                            <Text style={styles.outlineButtonText}>Select New Images</Text>
+                        </Pressable>
+                        {allImageUris.length === 0 && form.formState.isSubmitted /* Show only if trying to submit without photos */ && <Text style={styles.errorText}>Please add at least one photo.</Text>}
+                    </View>
+                    <View style={styles.imageGrid}>
+                        {allImageUris.map((uri) => (
+                            <View key={uri} style={styles.imageContainer}>
+                                <Image source={{ uri: uri }} style={styles.imagePreview} />
+                                <Pressable
                                     style={styles.removeImageButton}
                                     onPress={() => removeImage(uri)}
                                     disabled={isSubmitting}
-                                 >
-                                     <Ionicons name="close-circle" size={28} color="#fff" style={styles.removeImageIcon} />
-                                 </Pressable>
-                             </View>
-                         ))}
-                     </View>
+                                >
+                                    <Ionicons name="close-circle" size={28} color="#fff" style={styles.removeImageIcon} />
+                                </Pressable>
+                            </View>
+                        ))}
+                    </View>
                 </View>
 
                 {/* Submit Button */}
                 <View style={styles.buttonContainer}>
-                     <Pressable style={[styles.button, styles.outlineButton, styles.cancelButton]} onPress={() => navigation.goBack()} disabled={isSubmitting}>
-                         <Text style={[styles.outlineButtonText, { color: '#555'}]}>Cancel</Text>
-                     </Pressable>
-                     <Pressable
+                    <Pressable style={[styles.button, styles.outlineButton, styles.cancelButton]} onPress={() => navigation.goBack()} disabled={isSubmitting}>
+                        <Text style={[styles.outlineButtonText, { color: '#555'}]}>Cancel</Text>
+                    </Pressable>
+                    <Pressable
                         style={[styles.button, styles.submitButton, (isSubmitting || allImageUris.length === 0) ? styles.buttonDisabled : {} ]}
                         onPress={handleSubmit(onSubmit)}
-                        // Disable if submitting OR if no photos are present
                         disabled={isSubmitting || allImageUris.length === 0}
-                     >
-                         {isSubmitting ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }}/> : null}
-                         <Text style={styles.buttonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
-                     </Pressable>
+                    >
+                        {isSubmitting ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }}/> : null}
+                        <Text style={styles.buttonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
+                    </Pressable>
                 </View>
 
             </ScrollView>
-            {/* Toast messages need to be configured globally, usually in App.tsx */}
             <Toast />
         </SafeAreaView>
     );
 };
 
-// --- Styles --- (Keep existing styles - minor tweaks for consistency)
+// --- Styles --- (Keep existing styles)
 const styles = StyleSheet.create({
     safeArea: { flex: 1, backgroundColor: '#f8f9fa' },
     scrollView: { flex: 1 },
-    contentContainer: { padding: 20, paddingBottom: 40 }, // Added bottom padding
-    centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 24, color: '#333', textAlign: 'center' }, // Centered
+    contentContainer: { padding: 20, paddingBottom: 40 },
+    centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
+    headerTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 24, color: '#333', textAlign: 'center' },
     section: { marginBottom: 24, backgroundColor: '#fff', borderRadius: 8, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 1.00, elevation: 1, },
-    sectionTitle: { fontSize: 20, fontWeight: '600', marginBottom: 16, color: '#444', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 }, // Added border
+    sectionTitle: { fontSize: 20, fontWeight: '600', marginBottom: 16, color: '#444', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 },
     inputGroup: { marginBottom: 16 },
     label: { fontSize: 14, fontWeight: '500', color: '#555', marginBottom: 6 },
     input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 10, fontSize: 16, backgroundColor: '#fff' },
     textArea: { height: 100, textAlignVertical: 'top' },
     errorText: { fontSize: 12, color: 'red', marginTop: 4 },
     placeholderText: { color: '#999' },
-    // --- Date Picker Styles ---
     dateButton: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 12, minHeight: 44, backgroundColor: '#fff' },
     dateIcon: { marginRight: 8 },
     dateText: { fontSize: 16, color: '#333'},
-    // --- Picker Placeholder ---
-    pickerPlaceholder: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 12, backgroundColor: '#fff', minHeight: 44, justifyContent: 'center' },
-    pickerText: { fontSize: 16, color: '#333'},
-    // --- Interest Styles ---
+    pickerPlaceholder: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, /*paddingHorizontal: 12,*/ backgroundColor: '#fff', minHeight: 44, justifyContent: 'center' }, // input inside already has padding
     interestInputContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
     interestInput: { flex: 1 },
-    addButton: { paddingHorizontal: 16, height: 44, justifyContent: 'center', backgroundColor: '#FF6347' },
-    badgeContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 8 }, // Use gap
-    badge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6347', borderRadius: 15, paddingVertical: 5, paddingLeft: 10, paddingRight: 4, /* Removed margin */ },
+    addButton: { paddingHorizontal: 16, height: 44, justifyContent: 'center', backgroundColor: '#FF6347', borderRadius: 6 },
+    badgeContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 8 },
+    badge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6347', borderRadius: 15, paddingVertical: 5, paddingLeft: 10, paddingRight: 4, },
     badgeText: { color: '#fff', fontSize: 14, marginRight: 4 },
     removeBadgeButton: { padding: 2 },
-    // --- Image Styles ---
-    imageGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 10 }, // Use gap
+    imageGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 10 },
     imageContainer: {
-        width: '30%', // Adjust if needed with gap
+        width: '30%', 
         aspectRatio: 1,
-        // margin: '1.66%', // Replaced by gap
         borderWidth: 1,
         borderColor: '#eee',
         borderRadius: 6,
         overflow: 'hidden',
         backgroundColor: '#f0f0f0',
-        position: 'relative', // Needed for absolute positioning of remove button
-     },
+        position: 'relative',
+       },
     imagePreview: { width: '100%', height: '100%' },
     removeImageButton: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 14, width: 28, height: 28, justifyContent: 'center', alignItems: 'center', zIndex: 1 },
     removeImageIcon: { /* Icon styles if needed */ },
-    // --- Button Styles ---
-    buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#eee', gap: 16 }, // Use gap
-    button: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 100, flex: 1 }, // Added flex: 1
+    buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#eee', gap: 16 },
+    button: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 100, flex: 1 },
     buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
-    submitButton: { backgroundColor: '#FF6347', /* Removed flex: 1 and marginLeft */ },
-    outlineButton: { borderWidth: 1, borderColor: '#FF6347', backgroundColor: '#fff', /* Removed flex: 1 */ },
+    submitButton: { backgroundColor: '#FF6347', },
+    outlineButton: { borderWidth: 1, borderColor: '#FF6347', backgroundColor: '#fff', },
     outlineButtonText: { color: '#FF6347', fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
-    cancelButton: { borderColor: '#aaa', /* Removed flex: 1 and marginRight */}, // Adjusted cancel button color
-    buttonDisabled: { backgroundColor: '#cccccc', borderColor: '#cccccc', opacity: 0.7 }, // Style for disabled state
-    // --- Option Button Example --- (Keep if you implement button-based pickers)
-    optionButton: { paddingVertical: 8, paddingHorizontal: 12, borderWidth: 1, borderColor: '#ccc', borderRadius: 6, marginRight: 8, marginBottom: 8 },
-    optionButtonSelected: { backgroundColor: '#FF6347', borderColor: '#FF6347' },
-    optionButtonTextSelected: { color: '#fff' },
-
+    cancelButton: { borderColor: '#aaa', },
+    buttonDisabled: { backgroundColor: '#cccccc', borderColor: '#cccccc', opacity: 0.7 },
 });
 
 export default EditProfileScreen;
