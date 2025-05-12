@@ -13,32 +13,22 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { supabase } from '../lib/supabaseClient';
-// import { useApp } from '../../App'; // <<<< REMOVED OLD IMPORT
-import { useApp } from '../contexts/AppContext'; // <<<< MODIFIED: Import from new context file (adjust path if your context is elsewhere)
+import { useApp } from '../contexts/AppContext'; // Ensure this path is correct
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import ProfileCard, { Profile } from '../components/ProfileCard'; // Assuming Profile type is compatible or defined appropriately
+import ProfileCard, { Profile } from '../components/ProfileCard';
 
 // It's good practice for this RootStackParamList to match the one in App.tsx if it refers to the same navigator.
-// Or be a subset if this screen can only navigate to a few specific screens.
-// For consistency with App.tsx's navigator:
 type ProfileBrowseScreenStackParamList = {
-    // Use 'ProfileBrowseScreen' if that's the route name in the main navigator
-    // For self-reference in type, 'ProfileBrowse' is fine if only used for this screen's prop type definition.
-    // However, for navigation.navigate calls, use exact route names from App.tsx.
-    ProfileBrowseScreen: undefined; // Changed from 'ProfileBrowse' for consistency with App.tsx if navigating from itself
+    ProfileBrowseScreen: undefined;
     EditProfileScreen: undefined;
-    WelcomeScreen: undefined; // Or other screens it can navigate to
+    WelcomeScreen: undefined; // Ensure WelcomeScreen is a route in your main navigator accessible from here
+    // Add other screens if this screen can navigate to them
 };
 
-// Using the ParamList from App.tsx would be more robust if this screen is part of that Stack.
-// import { RootStackParamList } from '../../App'; // If RootStackParamList from App.tsx is exported and intended to be shared
-
-// For now, using a local type. Ensure 'EditProfileScreen' matches the name in App.tsx's RootStackParamList.
 type ProfileBrowseScreenNavigationProp = StackNavigationProp<ProfileBrowseScreenStackParamList, 'ProfileBrowseScreen'>;
-
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
@@ -59,12 +49,12 @@ interface FetchedUserProfileData {
 }
 
 export default function ProfileBrowseScreen() {
-    const { user, isLoadingSupabase } = useApp(); // Now using the imported useApp. isLoadingSupabase might be useful here.
+    const { user, isLoadingSupabase } = useApp();
     const navigation = useNavigation<ProfileBrowseScreenNavigationProp>();
     const insets = useSafeAreaInsets();
     const [profiles, setProfiles] = useState<Profile[]>([]);
     const [currentIndex, setCurrentIndex] = useState(0);
-    const [loading, setLoading] = useState(false); // This is for profiles fetching
+    const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleLogout = async () => {
@@ -77,14 +67,24 @@ export default function ProfileBrowseScreen() {
                     text: "Logout",
                     style: "destructive",
                     onPress: async () => {
-                        // setLoading(true); // You might want a different loading indicator for logout
+                        // Optional: set a specific loading state for logout if needed
+                        // e.g., setLoggingOut(true);
+
                         const { error: signOutError } = await supabase.auth.signOut();
+
+                        // Optional: setLoggingOut(false);
+
                         if (signOutError) {
                             Alert.alert("Logout Error", signOutError.message);
-                            // setLoading(false);
+                        } else {
+                            // Successfully signed out.
+                            // The user state in AppContext will update via onAuthStateChange.
+                            // Now, immediately reset navigation to WelcomeScreen.
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'WelcomeScreen' }], // Ensure 'WelcomeScreen' matches your route name in the navigator
+                            });
                         }
-                        // No need to setLoading(false) here, as the auth state change
-                        // should trigger a re-render and navigation via RootNavigator
                     },
                 },
             ]
@@ -92,12 +92,15 @@ export default function ProfileBrowseScreen() {
     };
 
     const handleEditProfile = () => {
-        // Ensure user is still valid if needed, though context should be up-to-date
         if (user) {
             navigation.navigate('EditProfileScreen');
         } else {
-            // This case should ideally be handled by RootNavigator redirecting to login
             Alert.alert("Error", "You are not logged in.");
+            // This case should ideally be handled by RootNavigator redirecting too
+            navigation.reset({
+                index: 0,
+                routes: [{ name: 'WelcomeScreen' }],
+            });
         }
     };
 
@@ -114,8 +117,8 @@ export default function ProfileBrowseScreen() {
     }, []);
 
     const fetchProfiles = useCallback(async () => {
-        if (!user) { // If no user from context, don't fetch
-            setProfiles([]); // Clear profiles
+        if (!user) {
+            setProfiles([]);
             setLoading(false);
             return;
         }
@@ -126,7 +129,7 @@ export default function ProfileBrowseScreen() {
                 .from('individual_profiles')
                 .select('user_id, first_name, last_name, date_of_birth, gender, bio, interests, location, looking_for, profile_pictures, created_at, updated_at, is_profile_complete')
                 .eq('is_profile_complete', true)
-                .neq('user_id', user.id) // Use user.id from context
+                .neq('user_id', user.id)
                 .limit(50);
 
             if (fetchError) throw fetchError;
@@ -168,19 +171,21 @@ export default function ProfileBrowseScreen() {
         } finally {
             setLoading(false);
         }
-    }, [user, getPublicImageUrl]); // `user` from context is now a dependency
+    }, [user, getPublicImageUrl]);
 
     useEffect(() => {
-        // Only fetch profiles if Supabase auth check is done AND user exists
         if (!isLoadingSupabase) {
             if (user) {
                 fetchProfiles();
             } else {
                 // User is confirmed to be null (logged out or no session)
+                // If navigation.reset in handleLogout hasn't unmounted this screen yet,
+                // clear local state.
+                // This part is fine, as the navigation reset should take precedence.
                 setProfiles([]);
                 setCurrentIndex(0);
                 setError(null);
-                setLoading(false); // Ensure loading is false
+                setLoading(false);
             }
         }
     }, [user, isLoadingSupabase, fetchProfiles]);
@@ -199,7 +204,7 @@ export default function ProfileBrowseScreen() {
             const { error: insertError } = await supabase.from('likes').insert([likeData]);
 
             if (insertError) {
-                if (insertError.code === '23505') {
+                if (insertError.code === '23505') { // Unique violation
                     Alert.alert("Already Liked", `You've already liked ${profiles.find(p => p.id === likedProfileId)?.first_name || 'this profile'}.`);
                 } else {
                     throw new Error(`Failed to insert like: ${insertError.message} (Code: ${insertError.code})`);
@@ -220,7 +225,6 @@ export default function ProfileBrowseScreen() {
         paddingRight: insets.right + styles.headerContainer.paddingHorizontal,
     };
 
-    // Render a loading state if Supabase is still authenticating
     if (isLoadingSupabase) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
@@ -232,20 +236,26 @@ export default function ProfileBrowseScreen() {
         );
     }
 
-    // If Supabase auth is done and there's no user, RootNavigator should handle redirect.
-    // This screen might briefly render this if logic is complex, or if user logs out.
-    if (!user) { // `loading` here refers to profile loading, not auth loading
+    // If !user, the navigation.reset in handleLogout should have already redirected.
+    // This part might briefly flash if the reset isn't instantaneous or if the user somehow lands here without a session
+    // (e.g., deep link to this screen without being logged in, which your RootNavigator should also handle).
+    // The primary mechanism for handling !user is now the explicit navigation reset on logout
+    // and the conditional rendering in your RootNavigator.
+    if (!user) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
-                    <Text style={styles.infoText}>Please log in to browse profiles.</Text>
+                    {/* This message should ideally not be seen often post-logout due to the immediate redirect. */}
+                    {/* It might still appear if the component mounts and user is already null before useEffect runs, */}
+                    {/* or if the RootNavigator hasn't switched stacks yet. */}
+                    <Text style={styles.infoText}>Redirecting to Welcome Screen...</Text>
+                     <ActivityIndicator size="small" color="#FF6347" />
                 </View>
             </SafeAreaView>
         );
     }
 
-    // User is authenticated, now check for profile loading state
-    if (loading) { // This `loading` is for fetching profiles
+    if (loading) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
@@ -269,7 +279,7 @@ export default function ProfileBrowseScreen() {
         );
     }
 
-    if (user && !loading && profiles.length === 0) { // User exists, not loading profiles, but no profiles found
+    if (user && !loading && profiles.length === 0) {
         return (
             <LinearGradient
                 colors={['#FF6B6B', '#FFD166']}
@@ -295,18 +305,16 @@ export default function ProfileBrowseScreen() {
 
     const currentProfile = profiles[currentIndex];
 
-    // This should ideally not be reached if !currentProfile due to the above conditions,
-    // but as a fallback:
     if (!currentProfile && !loading) {
          return (
             <LinearGradient
-                colors={['#fe9494', '#00008b']} // Or a "no profiles" gradient
+                colors={['#fe9494', '#00008b']}
                 start={{ x: 0, y: 0.5 }}
                 end={{ x: 1, y: 0.5 }}
                 style={styles.gradientFullScreen}
             >
                 <View style={[styles.headerContainer, headerDynamicStyle]}>
-                     <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
+                    <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
                         <Text style={styles.headerButtonText}>Edit Profile</Text>
                     </Pressable>
                     <Pressable onPress={handleLogout} style={[styles.headerButton, styles.headerButtonRight]}>
@@ -320,7 +328,6 @@ export default function ProfileBrowseScreen() {
             </LinearGradient>
         );
     }
-
 
     return (
         <LinearGradient
@@ -338,7 +345,7 @@ export default function ProfileBrowseScreen() {
                 </Pressable>
             </View>
 
-            {currentProfile && ( // Ensure currentProfile exists before rendering ProfileCard
+            {currentProfile && (
                 <ProfileCard
                     profile={currentProfile}
                     onLike={handleLikeProfile}
@@ -376,7 +383,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 15,
-        paddingVertical: -20, 
+        paddingVertical: -20, // This seems unusual, typically padding is positive
         minHeight: 100,
         zIndex: 20,
     },
@@ -398,7 +405,7 @@ const styles = StyleSheet.create({
     },
     safeAreaSolidBackground: {
         flex: 1,
-        backgroundColor: '#1c1c1e',
+        backgroundColor: '#1c1c1e', // Or your app's default background
     },
     centeredMessageContainer: {
         flex: 1,
@@ -416,7 +423,7 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 10,
         fontSize: 16,
-        color: '#f0f0f0',
+        color: '#f0f0f0', // Ensure contrast with safeAreaSolidBackground
     },
     errorText: {
         color: '#FF6347',
@@ -427,7 +434,9 @@ const styles = StyleSheet.create({
     infoText: {
         textAlign: 'center',
         fontSize: 16,
-        color: 'white',
+        color: 'white', // For gradient background
+        // For solid background, ensure this has good contrast too:
+        // color: '#d3d3d3', // Example for dark solid background
         paddingHorizontal: 20,
         marginBottom: 20,
         textShadowColor: 'rgba(0, 0, 0, 0.3)',
@@ -453,17 +462,20 @@ const styles = StyleSheet.create({
     },
     progressSafeArea: {
         position: 'absolute',
-        top: 0,
+        top: 0, // Adjust as needed if you have a custom header that insets affect
         left: 0,
         right: 0,
-        zIndex: 10,
+        zIndex: 10, // Ensure it's above content but below modals/alerts
     },
     progressBarsContainer: {
         flexDirection: 'row',
         height: 4,
         marginHorizontal: 10,
         gap: 4,
-        marginTop: 70 + 35, 
+        // Adjusted marginTop to be more dynamic based on your header's typical height
+        // You might need to fine-tune this value or pass it dynamically
+        marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35, // Approximate typical header height + some margin + your previous value.
+                                                            // Consider using `insets.top` if the progress bar should be below the safe area.
     },
     progressBarSegment: {
         flex: 1,
