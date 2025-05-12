@@ -315,8 +315,8 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 15, // Base horizontal padding
-        paddingVertical: -6,   // <<<< INCREASED base vertical padding for a slightly taller header (was 10)
-        minHeight: 40,         // Content height for buttons
+        paddingVertical: -20,   // <<<< INCREASED base vertical padding for a slightly taller header (was 10)
+        minHeight: 100,         // Content height for buttons
         zIndex: 20,            // Ensure header is above other content
         // The actual paddingTop, Left, Right will be dynamically set using insets
     },
@@ -406,7 +406,7 @@ const styles = StyleSheet.create({
         gap: 4,
         // The new base header height: minHeight (40) + paddingVertical*2 (15*2=30) = 70px.
         // This marginTop is from the top of the content area of progressSafeArea (which already accounts for system status bar).
-        marginTop: 70 + 15, // Base header height (70) + desired gap (15) = 85
+        marginTop: 70 + 35, // Base header height (70) + desired gap (15) = 85
     },
     progressBarSegment: {
         flex: 1,
