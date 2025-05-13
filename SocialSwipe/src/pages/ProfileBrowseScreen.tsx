@@ -25,6 +25,7 @@ type ProfileBrowseScreenStackParamList = {
     ProfileBrowseScreen: undefined;
     EditProfileScreen: undefined;
     WelcomeScreen: undefined; // Ensure WelcomeScreen is a route in your main navigator accessible from here
+    NotificationsScreen: undefined; // <-- ADDED: For navigating to notifications
     // Add other screens if this screen can navigate to them
 };
 
@@ -67,22 +68,13 @@ export default function ProfileBrowseScreen() {
                     text: "Logout",
                     style: "destructive",
                     onPress: async () => {
-                        // Optional: set a specific loading state for logout if needed
-                        // e.g., setLoggingOut(true);
-
                         const { error: signOutError } = await supabase.auth.signOut();
-
-                        // Optional: setLoggingOut(false);
-
                         if (signOutError) {
                             Alert.alert("Logout Error", signOutError.message);
                         } else {
-                            // Successfully signed out.
-                            // The user state in AppContext will update via onAuthStateChange.
-                            // Now, immediately reset navigation to WelcomeScreen.
                             navigation.reset({
                                 index: 0,
-                                routes: [{ name: 'WelcomeScreen' }], // Ensure 'WelcomeScreen' matches your route name in the navigator
+                                routes: [{ name: 'WelcomeScreen' }],
                             });
                         }
                     },
@@ -96,12 +88,16 @@ export default function ProfileBrowseScreen() {
             navigation.navigate('EditProfileScreen');
         } else {
             Alert.alert("Error", "You are not logged in.");
-            // This case should ideally be handled by RootNavigator redirecting too
             navigation.reset({
                 index: 0,
                 routes: [{ name: 'WelcomeScreen' }],
             });
         }
+    };
+
+    // NEW: Handler to navigate to NotificationsScreen
+    const handleNavigateToNotifications = () => {
+        navigation.navigate('NotificationsScreen');
     };
 
     const getPublicImageUrl = useCallback((pathOrUrl: string | null | undefined): string | null => {
@@ -178,10 +174,6 @@ export default function ProfileBrowseScreen() {
             if (user) {
                 fetchProfiles();
             } else {
-                // User is confirmed to be null (logged out or no session)
-                // If navigation.reset in handleLogout hasn't unmounted this screen yet,
-                // clear local state.
-                // This part is fine, as the navigation reset should take precedence.
                 setProfiles([]);
                 setCurrentIndex(0);
                 setError(null);
@@ -211,6 +203,7 @@ export default function ProfileBrowseScreen() {
                 }
             } else {
                 Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
+                // TODO: Consider creating a notification for the liked user here
             }
         } catch (err: any) {
             console.error("Error in handleLikeProfile:", err);
@@ -236,20 +229,12 @@ export default function ProfileBrowseScreen() {
         );
     }
 
-    // If !user, the navigation.reset in handleLogout should have already redirected.
-    // This part might briefly flash if the reset isn't instantaneous or if the user somehow lands here without a session
-    // (e.g., deep link to this screen without being logged in, which your RootNavigator should also handle).
-    // The primary mechanism for handling !user is now the explicit navigation reset on logout
-    // and the conditional rendering in your RootNavigator.
     if (!user) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
-                    {/* This message should ideally not be seen often post-logout due to the immediate redirect. */}
-                    {/* It might still appear if the component mounts and user is already null before useEffect runs, */}
-                    {/* or if the RootNavigator hasn't switched stacks yet. */}
                     <Text style={styles.infoText}>Redirecting to Welcome Screen...</Text>
-                     <ActivityIndicator size="small" color="#FF6347" />
+                    <ActivityIndicator size="small" color="#FF6347" />
                 </View>
             </SafeAreaView>
         );
@@ -291,13 +276,16 @@ export default function ProfileBrowseScreen() {
                     <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
                         <Text style={styles.headerButtonText}>Edit Profile</Text>
                     </Pressable>
-                    <Pressable onPress={handleLogout} style={[styles.headerButton, styles.headerButtonRight]}>
-                        <Text style={styles.headerButtonText}>Logout</Text>
+                    {/* MODIFIED: Changed Logout to Notifications button */}
+                    <Pressable onPress={handleNavigateToNotifications} style={[styles.headerButton, styles.headerButtonRight]}>
+                        <Text style={styles.headerButtonText}>Notifications</Text>
                     </Pressable>
                 </View>
                 <View style={styles.centeredMessageContainerOnGradient}>
                     <Text style={styles.infoText}>No other profiles found yet. Check back soon!</Text>
                     <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
+                    {/* Optional: Add back a logout button elsewhere if needed, e.g., in Edit Profile or a dedicated settings menu */}
+                    {/* <Pressable onPress={handleLogout} style={[styles.button, {marginTop: 20}]}><Text style={styles.buttonText}>Logout</Text></Pressable> */}
                 </View>
             </LinearGradient>
         );
@@ -306,7 +294,7 @@ export default function ProfileBrowseScreen() {
     const currentProfile = profiles[currentIndex];
 
     if (!currentProfile && !loading) {
-         return (
+        return (
             <LinearGradient
                 colors={['#fe9494', '#00008b']}
                 start={{ x: 0, y: 0.5 }}
@@ -317,8 +305,9 @@ export default function ProfileBrowseScreen() {
                     <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
                         <Text style={styles.headerButtonText}>Edit Profile</Text>
                     </Pressable>
-                    <Pressable onPress={handleLogout} style={[styles.headerButton, styles.headerButtonRight]}>
-                        <Text style={styles.headerButtonText}>Logout</Text>
+                    {/* MODIFIED: Changed Logout to Notifications button */}
+                    <Pressable onPress={handleNavigateToNotifications} style={[styles.headerButton, styles.headerButtonRight]}>
+                        <Text style={styles.headerButtonText}>Notifications</Text>
                     </Pressable>
                 </View>
                 <View style={styles.centeredMessageContainerOnGradient}>
@@ -340,8 +329,9 @@ export default function ProfileBrowseScreen() {
                 <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
                     <Text style={styles.headerButtonText}>Edit Profile</Text>
                 </Pressable>
-                <Pressable onPress={handleLogout} style={[styles.headerButton, styles.headerButtonRight]}>
-                    <Text style={styles.headerButtonText}>Logout</Text>
+                {/* MODIFIED: Changed Logout to Notifications button */}
+                <Pressable onPress={handleNavigateToNotifications} style={[styles.headerButton, styles.headerButtonRight]}>
+                    <Text style={styles.headerButtonText}>Notifications</Text>
                 </Pressable>
             </View>
 
@@ -435,8 +425,6 @@ const styles = StyleSheet.create({
         textAlign: 'center',
         fontSize: 16,
         color: 'white', // For gradient background
-        // For solid background, ensure this has good contrast too:
-        // color: '#d3d3d3', // Example for dark solid background
         paddingHorizontal: 20,
         marginBottom: 20,
         textShadowColor: 'rgba(0, 0, 0, 0.3)',
@@ -462,20 +450,17 @@ const styles = StyleSheet.create({
     },
     progressSafeArea: {
         position: 'absolute',
-        top: 0, // Adjust as needed if you have a custom header that insets affect
+        top: 0, 
         left: 0,
         right: 0,
-        zIndex: 10, // Ensure it's above content but below modals/alerts
+        zIndex: 10, 
     },
     progressBarsContainer: {
         flexDirection: 'row',
         height: 4,
         marginHorizontal: 10,
         gap: 4,
-        // Adjusted marginTop to be more dynamic based on your header's typical height
-        // You might need to fine-tune this value or pass it dynamically
-        marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35, // Approximate typical header height + some margin + your previous value.
-                                                            // Consider using `insets.top` if the progress bar should be below the safe area.
+        marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35, 
     },
     progressBarSegment: {
         flex: 1,
