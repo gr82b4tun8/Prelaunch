@@ -20,6 +20,7 @@ import CreateProfileScreen from './src/pages/CreateProfile';
 import ProfileBrowseScreen from './src/pages/ProfileBrowseScreen';
 import WelcomeScreen from './src/pages/WelcomeScreen';
 import EditProfileScreen from './src/pages/EditProfileScreen';
+import NotificationsScreen from './src/pages/NotificationsScreen'; // <<<< ADDED: Import NotificationsScreen
 
 // --- Navigation Stacks ---
 export type RootStackParamList = {
@@ -29,6 +30,7 @@ export type RootStackParamList = {
     CreateProfileScreen: undefined;
     ProfileBrowseScreen: undefined;
     EditProfileScreen: undefined;
+    NotificationsScreen: undefined; // <<<< ADDED: NotificationsScreen to param list
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -78,6 +80,7 @@ function RootNavigator() {
                 />
                 <Stack.Screen name="ProfileBrowseScreen" component={ProfileBrowseScreen} />
                 <Stack.Screen name="EditProfileScreen" component={EditProfileScreen} />
+                <Stack.Screen name="NotificationsScreen" component={NotificationsScreen} />{/* <<<< ADDED: Stack screen for NotificationsScreen */}
             </Stack.Navigator>
         </NavigationContainer>
     );
