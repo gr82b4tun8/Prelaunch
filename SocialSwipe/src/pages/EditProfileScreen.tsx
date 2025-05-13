@@ -3,32 +3,32 @@
 // Includes ArrayBuffer fix for image upload
 // Corrected Supabase table name for update operation
 // Added MAX_PROFILE_PHOTOS constant
+// ADDED Logout button, LinearGradient background, and header styling from ProfileBrowseScreen reference
 
 import React, { useState, useEffect, useCallback } from 'react';
 import {
     View, Text, StyleSheet, ScrollView, TextInput, Pressable, Image,
-    ActivityIndicator, Alert, SafeAreaView, Platform // Platform check often needed
+    ActivityIndicator, Alert, SafeAreaView, Platform
 } from 'react-native';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useNavigation } from '@react-navigation/native';
-// Assuming you have a type definition for your stack navigator
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { supabase } from '../lib/supabaseClient'; // Adjust path
-
-// ***** MODIFICATION START *****
-// import { useAuth } from '../contexts/AuthContext'; // <<<< REMOVE THIS
-import { useApp } from '../contexts/AppContext'; // <<<< ADD THIS (Adjust path if necessary)
-// ***** MODIFICATION END *****
-
-import { v4 as uuidv4 } from 'uuid'; // Ensure uuid is installed
-import 'react-native-get-random-values'; // Ensure polyfill is imported (usually in App.tsx)
+import { useApp } from '../contexts/AppContext'; // Adjust path if necessary
+import { v4 as uuidv4 } from 'uuid';
+import 'react-native-get-random-values';
 import * as ImagePicker from 'expo-image-picker';
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import Toast from 'react-native-toast-message';
-import { Ionicons } from '@expo/vector-icons'; // Expo icons
+import { Ionicons } from '@expo/vector-icons';
 import { format, parseISO, startOfToday, subYears } from 'date-fns';
+
+// ***** MODIFICATION START: Added imports from ProfileBrowseScreen *****
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+// ***** MODIFICATION END *****
 
 // --- Constant for Max Photos ---
 const MAX_PROFILE_PHOTOS = 6;
@@ -37,9 +37,8 @@ const MAX_PROFILE_PHOTOS = 6;
 const profileSchema = z.object({
     firstName: z.string().min(1, { message: "First name is required." }),
     lastName: z.string().optional(),
-    // Keep dob as Date object for picker compatibility
     dob: z.date({ required_error: "Date of birth is required." }).refine(
-        (date) => date <= subYears(startOfToday(), 18), // Check if date is on or before 18 years ago
+        (date) => date <= subYears(startOfToday(), 18),
         { message: "Must be 18+" }
     ),
     gender: z.string().min(1, { message: "Please select a gender identity." }),
@@ -55,48 +54,33 @@ interface Profile {
     last_name?: string | null; date_of_birth: string; gender: string;
     bio?: string | null; interests?: string[] | null; location?: string | null;
     looking_for?: string | null; profile_pictures?: string[] | null;
-    // Ensure all fields match your DB table exactly
-    user_id: string; // Assuming you have user_id
+    user_id: string;
     liked_profile_user_ids?: string[] | null;
-    // dismissed_profile_user_ids?: string[] | null; // Removed based on previous step
-    // Add any other fields like business ones if this can edit both types
 }
 
-// Define your Navigation Stack Param List if not done globally
-// Ensure this matches the navigator where EditProfile resides.
-// 'WelcomeScreen' should be a valid target from your main App.tsx navigator.
 type YourSpecificNavigatorParamList = {
-    ProfileTab: undefined; // Example name for the profile tab screen
-    WelcomeScreen: undefined; // <<<< Ensure this is a valid target or use the correct one from App.tsx
-    EditProfile: undefined; // Current screen
-    // ... other screens in this specific navigator
+    ProfileTab: undefined;
+    WelcomeScreen: undefined;
+    EditProfile: undefined;
 };
 type EditProfileScreenNavigationProp = NativeStackNavigationProp<YourSpecificNavigatorParamList, 'EditProfile'>;
 
 
 const EditProfileScreen: React.FC = () => {
     const navigation = useNavigation<EditProfileScreenNavigationProp>();
-
-    // ***** MODIFICATION START *****
-    // const { user, loading: authLoading } = useAuth(); // <<<< REMOVE THIS
-    const { user, isLoadingSupabase, profile: contextProfile, fetchProfile } = useApp(); // <<<< ADD THIS
-    // `isLoadingSupabase` from AppContext will be used instead of `authLoading`
-    // `contextProfile` can be used to potentially pre-fill or verify data if needed,
-    // though your existing fetch logic in this screen might be sufficient.
-    // `WorkspaceProfile` from AppContext can be used to refresh the global profile state after an update.
-    // ***** MODIFICATION END *****
-
-    const [initialLoading, setInitialLoading] = useState(true); // This is for this screen's own data fetching
+    const { user, isLoadingSupabase, profile: contextProfile, fetchProfile } = useApp();
+    const [initialLoading, setInitialLoading] = useState(true);
     const [isSubmitting, setIsSubmitting] = useState(false);
-
-    // --- State ---
-    const [currentProfilePictures, setCurrentProfilePictures] = useState<string[]>([]); // URLs from DB
+    const [currentProfilePictures, setCurrentProfilePictures] = useState<string[]>([]);
     const [newImageAssets, setNewImageAssets] = useState<ImagePicker.ImagePickerAsset[]>([]);
     const [interests, setInterests] = useState<string[]>([]);
     const [interestInput, setInterestInput] = useState('');
     const [isDatePickerVisible, setDatePickerVisibility] = useState(false);
 
-    // --- React Hook Form Setup ---
+    // ***** MODIFICATION START: Added from ProfileBrowseScreen for header styling *****
+    const insets = useSafeAreaInsets();
+    // ***** MODIFICATION END *****
+
     const form = useForm<ProfileFormData>({
         resolver: zodResolver(profileSchema),
         defaultValues: {
@@ -106,15 +90,38 @@ const EditProfileScreen: React.FC = () => {
     const { handleSubmit, control, formState: { errors }, reset, watch } = form;
     const watchedDob = watch('dob');
 
-    // --- Fetch Existing Profile Data ---
+    // ***** MODIFICATION START: Copied handleLogout from ProfileBrowseScreen.tsx *****
+    const handleLogout = async () => {
+        Alert.alert(
+            "Logout",
+            "Are you sure you want to log out?",
+            [
+                { text: "Cancel", style: "cancel" },
+                {
+                    text: "Logout",
+                    style: "destructive",
+                    onPress: async () => {
+                        const { error: signOutError } = await supabase.auth.signOut();
+                        if (signOutError) {
+                            Alert.alert("Logout Error", signOutError.message);
+                        } else {
+                            navigation.reset({
+                                index: 0,
+                                routes: [{ name: 'WelcomeScreen' }],
+                            });
+                        }
+                    },
+                },
+            ]
+        );
+    };
+    // ***** MODIFICATION END *****
+
     useEffect(() => {
-        // ***** MODIFICATION START *****
-        // Use `isLoadingSupabase` from `useApp()`
         if (!isLoadingSupabase && user) {
-        // ***** MODIFICATION END *****
             const fetchProfileData = async () => {
                 setInitialLoading(true);
-                console.log("[EditProfile] Fetching profile data for user:", user.id); // Log with user ID
+                console.log("[EditProfile] Fetching profile data for user:", user.id);
                 try {
                     const { data, error, status } = await supabase
                         .from('individual_profiles')
@@ -141,13 +148,9 @@ const EditProfileScreen: React.FC = () => {
                     } else {
                         console.warn("[EditProfile] No profile data found for user.");
                         Toast.show({ type: 'info', text1: 'Profile not found', text2: 'You might need to create it first.' });
-                        // Optional: Consider if a new profile should be created here or navigate to CreateProfile
-                        // For now, we assume an existing profile should be editable.
-                        // If navigation.canGoBack(), it will just stay, allowing form fill for a new profile
-                        // if this screen is also for creation. If not, goBack makes sense.
-                         if (navigation.canGoBack()) {
-                             navigation.goBack();
-                         }
+                        if (navigation.canGoBack()) {
+                            navigation.goBack();
+                        }
                     }
                 } catch (error: any) {
                     console.error("[EditProfile] Failed to fetch profile data:", error);
@@ -161,19 +164,12 @@ const EditProfileScreen: React.FC = () => {
                 }
             };
             fetchProfileData();
-        // ***** MODIFICATION START *****
-        // Use `isLoadingSupabase` from `useApp()`
         } else if (!isLoadingSupabase && !user) {
-        // ***** MODIFICATION END *****
             console.log("[EditProfile] No user session (from AppContext), navigating to WelcomeScreen.");
-            navigation.navigate('WelcomeScreen'); // Or replace with 'AuthPage' if direct login is preferred
+            navigation.navigate('WelcomeScreen');
         }
-    // ***** MODIFICATION START *****
-    // Update dependencies for useEffect
     }, [user, isLoadingSupabase, reset, navigation]);
-    // ***** MODIFICATION END *****
 
-    // --- Image Handling --- (Keep as is)
     const pickImage = async () => {
         const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
         if (status !== 'granted') {
@@ -224,7 +220,6 @@ const EditProfileScreen: React.FC = () => {
         ...newImageAssets.map(asset => asset.uri)
     ];
 
-    // --- Interest Handling --- (Keep as is)
     const addInterest = useCallback(() => {
         const trimmedInterest = interestInput.trim();
         if (trimmedInterest && interests.length < 10 && !interests.includes(trimmedInterest)) {
@@ -241,7 +236,6 @@ const EditProfileScreen: React.FC = () => {
         setInterests(prev => prev.filter(interest => interest !== interestToRemove));
     }, []);
 
-    // --- Date Picker --- (Keep as is)
     const showDatePicker = () => setDatePickerVisibility(true);
     const hideDatePicker = () => setDatePickerVisibility(false);
     const handleDateConfirm = useCallback((date: Date, onChange: (date: Date) => void) => {
@@ -253,10 +247,8 @@ const EditProfileScreen: React.FC = () => {
         hideDatePicker();
     }, []);
 
-
-    // --- Form Submission Logic (UPDATE) ---
     const onSubmit = async (values: ProfileFormData) => {
-        if (!user) { // user from useApp()
+        if (!user) {
             Toast.show({ type: 'error', text1: 'User session not found.' }); return;
         }
         if (allImageUris.length === 0) {
@@ -268,7 +260,6 @@ const EditProfileScreen: React.FC = () => {
         console.log("[EditProfile] Starting onSubmit...");
 
         try {
-            // --- 1. Upload NEW Images ---
             if (newImageAssets.length > 0) {
                 Toast.show({ type: 'info', text1: "Uploading new images..." });
                 for (const asset of newImageAssets) {
@@ -299,8 +290,8 @@ const EditProfileScreen: React.FC = () => {
                         uploadedNewImageUrls.push(urlData.publicUrl);
                     }
                 }
-                 if (uploadedNewImageUrls.length === newImageAssets.length) {
-                   Toast.show({ type: 'success', text1: "New images uploaded!" });
+                if (uploadedNewImageUrls.length === newImageAssets.length) {
+                    Toast.show({ type: 'success', text1: "New images uploaded!" });
                 } else if (uploadedNewImageUrls.length > 0) {
                     Toast.show({ type: 'warning', text1: "Some images uploaded", text2: "Not all new images could be processed." });
                 } else if (newImageAssets.length > 0 && uploadedNewImageUrls.length === 0) {
@@ -308,7 +299,6 @@ const EditProfileScreen: React.FC = () => {
                 }
             }
 
-            // --- 2. Prepare Final Data ---
             const finalImageUrls = [...currentProfilePictures, ...uploadedNewImageUrls];
             const profileUpdateData = {
                 first_name: values.firstName,
@@ -321,30 +311,23 @@ const EditProfileScreen: React.FC = () => {
                 looking_for: values.lookingFor || null,
                 profile_pictures: finalImageUrls.length > 0 ? finalImageUrls : null,
                 updated_at: new Date().toISOString(),
-                // Check if profile was incomplete and is now complete
-                is_profile_complete: true // Assuming editing implies completion or re-completion
+                is_profile_complete: true
             };
 
-            // --- 3. Update Profile Data in Supabase ---
             Toast.show({ type: 'info', text1: "Saving changes..." });
             const { error: updateError } = await supabase
                 .from('individual_profiles')
                 .update(profileUpdateData)
                 .eq('user_id', user.id)
-                .select() // Add select to get the updated data back if needed
-                .single(); // Assuming one profile per user
+                .select()
+                .single();
 
             if (updateError) throw updateError;
 
-            // --- 4. Success ---
             Toast.show({ type: 'success', text1: 'Profile Updated!', text2: 'Your changes saved.' });
             setNewImageAssets([]);
             setCurrentProfilePictures(finalImageUrls.length > 0 ? finalImageUrls : []);
-
-            // ***** MODIFICATION START *****
-            // Refresh the global profile state in AppContext
             await fetchProfile(user.id);
-            // ***** MODIFICATION END *****
 
             if (navigation.canGoBack()) {
                 navigation.goBack();
@@ -358,249 +341,391 @@ const EditProfileScreen: React.FC = () => {
         }
     };
 
-    // --- Render ---
-    // ***** MODIFICATION START *****
-    // Use `isLoadingSupabase` from `useApp()` for the initial auth check
-    // `initialLoading` is for this screen's specific data fetch.
-    if (isLoadingSupabase || initialLoading) {
+    // ***** MODIFICATION START: For header styling from ProfileBrowseScreen *****
+    const headerDynamicStyle = {
+        paddingTop: insets.top + (Platform.OS === 'ios' ? 0 : 10), // Adjust as ProfileBrowseScreen style `paddingVertical: -20` is unusual
+        paddingBottom: 10, // Provide some padding
+        paddingLeft: insets.left + 15, // styles.headerContainer.paddingHorizontal
+        paddingRight: insets.right + 15, // styles.headerContainer.paddingHorizontal
+    };
     // ***** MODIFICATION END *****
-        return (<SafeAreaView style={styles.centered}><ActivityIndicator size="large" color="#FF6347" /></SafeAreaView>);
-    }
 
-    // If, after auth check, there's still no user, this would have been handled by the useEffect redirect.
-    // However, as a fallback or if the redirect logic changes:
-    if (!user) {
-         return (
-            <SafeAreaView style={styles.centered}>
-                <Text>User not found. Please try logging in again.</Text>
-                <Pressable onPress={() => navigation.navigate('WelcomeScreen')} style={styles.button}>
-                    <Text style={styles.buttonText}>Go to Welcome</Text>
-                </Pressable>
-            </SafeAreaView>
+
+    if (isLoadingSupabase || initialLoading) {
+        // ***** MODIFICATION START: Use gradient for loading screen too *****
+        return (
+            <LinearGradient colors={['#fe9494', '#00008b']} style={styles.gradientFullScreen}>
+                <SafeAreaView style={[styles.safeAreaTransparent, styles.centered]}>
+                    <ActivityIndicator size="large" color="#FFFFFF" />
+                    <Text style={styles.loadingText}>Loading Profile...</Text>
+                </SafeAreaView>
+            </LinearGradient>
         );
+        // ***** MODIFICATION END *****
     }
 
+    if (!user) {
+        // ***** MODIFICATION START: Use gradient for this state too *****
+        return (
+            <LinearGradient colors={['#fe9494', '#00008b']} style={styles.gradientFullScreen}>
+                <SafeAreaView style={[styles.safeAreaTransparent, styles.centered]}>
+                    <Text style={styles.infoText}>User not found. Please try logging in again.</Text>
+                    <Pressable onPress={() => navigation.navigate('WelcomeScreen')} style={[styles.button, {backgroundColor: 'rgba(255,255,255,0.25)'}]}>
+                        <Text style={styles.buttonText}>Go to Welcome</Text>
+                    </Pressable>
+                </SafeAreaView>
+            </LinearGradient>
+        );
+        // ***** MODIFICATION END *****
+    }
 
-    // Render Form using ScrollView
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <ScrollView
-                style={styles.scrollView}
-                contentContainerStyle={styles.contentContainer}
-                keyboardShouldPersistTaps="handled"
-            >
-                <Text style={styles.headerTitle}>Edit Your Profile</Text>
+        // ***** MODIFICATION START: Added LinearGradient wrapper *****
+        <LinearGradient colors={['#fe9494', '#00008b']} style={styles.gradientFullScreen}>
+            <SafeAreaView style={styles.safeAreaTransparent}>
+                {/* ***** MODIFICATION START: Added new header from ProfileBrowseScreen ***** */}
+                <View style={[styles.headerContainer, headerDynamicStyle]}>
+                    <Pressable onPress={() => navigation.goBack()} style={[styles.headerButton]}>
+                        <Ionicons name="arrow-back" size={24} color="#fff" />
+                    </Pressable>
+                    <Text style={styles.headerTitle}>Edit Your Profile</Text>
+                    <Pressable onPress={handleLogout} style={[styles.headerButton]}>
+                         <Ionicons name="log-out-outline" size={24} color="#fff" />
+                    </Pressable>
+                </View>
+                {/* ***** MODIFICATION END ***** */}
 
-                {/* Basic Info Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Basic Information</Text>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>First Name*</Text>
-                        <Controller name="firstName" control={control} render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value} placeholder="Enter first name" editable={!isSubmitting} />
-                        )} />
-                        {errors.firstName && <Text style={styles.errorText}>{errors.firstName.message}</Text>}
+                <ScrollView
+                    style={styles.scrollView}
+                    contentContainerStyle={styles.contentContainer}
+                    keyboardShouldPersistTaps="handled"
+                >
+                    {/* Basic Info Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Basic Information</Text>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>First Name*</Text>
+                            <Controller name="firstName" control={control} render={({ field: { onChange, onBlur, value } }) => (
+                                <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value} placeholder="Enter first name" placeholderTextColor="#bbb" editable={!isSubmitting} />
+                            )} />
+                            {errors.firstName && <Text style={styles.errorText}>{errors.firstName.message}</Text>}
+                        </View>
+                        {/* ... other fields ... */}
+                         <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Last Name</Text>
+                            <Controller name="lastName" control={control} render={({ field: { onChange, onBlur, value } }) => (
+                                <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="Enter last name" placeholderTextColor="#bbb" editable={!isSubmitting} />
+                            )} />
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Date of Birth*</Text>
+                            <Controller name="dob" control={control} render={({ field: { onChange, value } }) => (
+                                <>
+                                    <Pressable onPress={showDatePicker} style={styles.dateButton} disabled={isSubmitting}>
+                                        <Ionicons name="calendar-outline" size={20} color="#eee" style={styles.dateIcon} />
+                                        <Text style={[styles.dateText, !value && styles.placeholderText]}>
+                                            {value ? format(value, 'PPP') : 'Select Date'}
+                                        </Text>
+                                    </Pressable>
+                                    <DateTimePickerModal
+                                        isVisible={isDatePickerVisible}
+                                        mode="date"
+                                        date={value || subYears(startOfToday(), 18)}
+                                        maximumDate={subYears(startOfToday(), 18)}
+                                        onConfirm={(date) => handleDateConfirm(date, onChange)}
+                                        onCancel={hideDatePicker}
+                                        // Styling for dark mode picker if available/needed
+                                        // display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                                        // themeVariant="dark" // Or "light" based on your app's theme
+                                    />
+                                </>
+                            )} />
+                            {errors.dob && <Text style={styles.errorText}>{errors.dob.message}</Text>}
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Gender*</Text>
+                            <Controller name="gender" control={control} render={({ field: { onChange, value } }) => (
+                                <View style={styles.pickerPlaceholder}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="Select Gender (e.g., Male, Female, Other)"
+                                        placeholderTextColor="#bbb"
+                                        value={value}
+                                        onChangeText={onChange}
+                                        editable={!isSubmitting}
+                                    />
+                                </View>
+                            )} />
+                            {errors.gender && <Text style={styles.errorText}>{errors.gender.message}</Text>}
+                        </View>
                     </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Last Name</Text>
-                        <Controller name="lastName" control={control} render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="Enter last name" editable={!isSubmitting} />
-                        )} />
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Date of Birth*</Text>
-                        <Controller name="dob" control={control} render={({ field: { onChange, value } }) => (
-                            <>
-                                <Pressable onPress={showDatePicker} style={styles.dateButton} disabled={isSubmitting}>
-                                    <Ionicons name="calendar-outline" size={20} color="#555" style={styles.dateIcon} />
-                                    <Text style={[styles.dateText, !value && styles.placeholderText]}>
-                                        {value ? format(value, 'PPP') : 'Select Date'}
-                                    </Text>
+
+                    {/* About Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>About You</Text>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Bio</Text>
+                            <Controller name="bio" control={control} render={({ field: { onChange, onBlur, value } }) => (
+                                <TextInput style={[styles.input, styles.textArea]} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="Tell us about yourself..." placeholderTextColor="#bbb" maxLength={500} multiline numberOfLines={4} editable={!isSubmitting} />
+                            )} />
+                            {errors.bio && <Text style={styles.errorText}>{errors.bio.message}</Text>}
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Interests (up to 10)</Text>
+                            <View style={styles.interestInputContainer}>
+                                <TextInput style={[styles.input, styles.interestInput]} value={interestInput} onChangeText={setInterestInput} placeholder="Type interest and add" placeholderTextColor="#bbb" onSubmitEditing={addInterest} editable={!isSubmitting} />
+                                <Pressable style={[styles.button, styles.addButton]} onPress={addInterest} disabled={!interestInput.trim() || interests.length >= 10 || isSubmitting}>
+                                    <Text style={styles.buttonText}>Add</Text>
                                 </Pressable>
-                                <DateTimePickerModal
-                                    isVisible={isDatePickerVisible}
-                                    mode="date"
-                                    date={value || subYears(startOfToday(), 18)}
-                                    maximumDate={subYears(startOfToday(), 18)}
-                                    onConfirm={(date) => handleDateConfirm(date, onChange)}
-                                    onCancel={hideDatePicker}
-                                />
-                            </>
-                        )} />
-                        {errors.dob && <Text style={styles.errorText}>{errors.dob.message}</Text>}
-                    </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Gender*</Text>
-                        <Controller name="gender" control={control} render={({ field: { onChange, value } }) => (
-                            <View style={styles.pickerPlaceholder}>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="Select Gender (e.g., Male, Female, Other)"
-                                    value={value}
-                                    onChangeText={onChange}
-                                    editable={!isSubmitting}
-                                />
                             </View>
-                        )} />
-                        {errors.gender && <Text style={styles.errorText}>{errors.gender.message}</Text>}
+                            <View style={styles.badgeContainer}>
+                                {interests.map(interest => (
+                                    <View key={interest} style={styles.badge}>
+                                        <Text style={styles.badgeText}>{interest}</Text>
+                                        <Pressable onPress={() => removeInterest(interest)} style={styles.removeBadgeButton} disabled={isSubmitting}>
+                                            <Ionicons name="close-circle" size={18} color="#fff" />
+                                        </Pressable>
+                                    </View>
+                                ))}
+                            </View>
+                        </View>
                     </View>
-                </View>
 
-                {/* About Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>About You</Text>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Bio</Text>
-                        <Controller name="bio" control={control} render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput style={[styles.input, styles.textArea]} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="Tell us about yourself..." maxLength={500} multiline numberOfLines={4} editable={!isSubmitting} />
-                        )} />
-                        {errors.bio && <Text style={styles.errorText}>{errors.bio.message}</Text>}
+                    {/* Preferences Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Preferences</Text>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Location</Text>
+                            <Controller name="location" control={control} render={({ field: { onChange, onBlur, value } }) => (
+                                <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="e.g., Miami, FL" placeholderTextColor="#bbb" editable={!isSubmitting} />
+                            )} />
+                        </View>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Looking For</Text>
+                            <Controller name="lookingFor" control={control} render={({ field: { onChange, value } }) => (
+                                <View style={styles.pickerPlaceholder}>
+                                    <TextInput
+                                        style={styles.input}
+                                        placeholder="e.g. Friends, Relationship"
+                                        placeholderTextColor="#bbb"
+                                        value={value}
+                                        onChangeText={onChange}
+                                        editable={!isSubmitting}
+                                    />
+                                </View>
+                            )} />
+                        </View>
                     </View>
-                    <View style={styles.inputGroup}>
-                         <Text style={styles.label}>Interests (up to 10)</Text>
-                         <View style={styles.interestInputContainer}>
-                             <TextInput style={[styles.input, styles.interestInput]} value={interestInput} onChangeText={setInterestInput} placeholder="Type interest and add" onSubmitEditing={addInterest} editable={!isSubmitting} />
-                             <Pressable style={[styles.button, styles.addButton]} onPress={addInterest} disabled={!interestInput.trim() || interests.length >= 10 || isSubmitting}>
-                                 <Text style={styles.buttonText}>Add</Text>
-                             </Pressable>
-                         </View>
-                         <View style={styles.badgeContainer}>
-                             {interests.map(interest => (
-                                 <View key={interest} style={styles.badge}>
-                                     <Text style={styles.badgeText}>{interest}</Text>
-                                     <Pressable onPress={() => removeInterest(interest)} style={styles.removeBadgeButton} disabled={isSubmitting}>
-                                         <Ionicons name="close-circle" size={18} color="#fff" />
-                                     </Pressable>
-                                 </View>
-                             ))}
-                         </View>
-                    </View>
-                </View>
 
-                {/* Preferences Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Preferences</Text>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Location</Text>
-                        <Controller name="location" control={control} render={({ field: { onChange, onBlur, value } }) => (
-                            <TextInput style={styles.input} onBlur={onBlur} onChangeText={onChange} value={value || ''} placeholder="e.g., Miami, FL" editable={!isSubmitting} />
-                        )} />
+                    {/* Photos Section */}
+                    <View style={styles.section}>
+                        <Text style={styles.sectionTitle}>Profile Pictures*</Text>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>Add or remove photos (up to {MAX_PROFILE_PHOTOS} total)</Text>
+                            <Pressable
+                                style={[styles.button, styles.outlineButton]}
+                                onPress={pickImage}
+                                disabled={isSubmitting || allImageUris.length >= MAX_PROFILE_PHOTOS}
+                            >
+                                <Ionicons name="images-outline" size={18} color="#FF6347" style={{ marginRight: 8 }}/>
+                                <Text style={styles.outlineButtonText}>Select New Images</Text>
+                            </Pressable>
+                            {allImageUris.length === 0 && form.formState.isSubmitted && <Text style={styles.errorText}>Please add at least one photo.</Text>}
+                        </View>
+                        <View style={styles.imageGrid}>
+                            {allImageUris.map((uri) => (
+                                <View key={uri} style={styles.imageContainer}>
+                                    <Image source={{ uri: uri }} style={styles.imagePreview} />
+                                    <Pressable
+                                        style={styles.removeImageButton}
+                                        onPress={() => removeImage(uri)}
+                                        disabled={isSubmitting}
+                                    >
+                                        <Ionicons name="close-circle" size={28} color="#fff" style={styles.removeImageIcon} />
+                                    </Pressable>
+                                </View>
+                            ))}
+                        </View>
                     </View>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Looking For</Text>
-                        <Controller name="lookingFor" control={control} render={({ field: { onChange, value } }) => (
-                             <View style={styles.pickerPlaceholder}>
-                                <TextInput
-                                    style={styles.input}
-                                    placeholder="e.g. Friends, Relationship (Use Picker)"
-                                    value={value}
-                                    onChangeText={onChange}
-                                    editable={!isSubmitting}
-                                />
-                             </View>
-                        )} />
-                    </View>
-                </View>
 
-                {/* Photos Section */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Profile Pictures*</Text>
-                    <View style={styles.inputGroup}>
-                        <Text style={styles.label}>Add or remove photos (up to {MAX_PROFILE_PHOTOS} total)</Text>
-                        <Pressable
-                            style={[styles.button, styles.outlineButton]}
-                            onPress={pickImage}
-                            disabled={isSubmitting || allImageUris.length >= MAX_PROFILE_PHOTOS}
-                        >
-                            <Ionicons name="images-outline" size={18} color="#FF6347" style={{ marginRight: 8 }}/>
-                            <Text style={styles.outlineButtonText}>Select New Images</Text>
+                    {/* Submit Button */}
+                    <View style={styles.buttonContainer}>
+                        <Pressable style={[styles.button, styles.outlineButton, styles.cancelButton]} onPress={() => navigation.goBack()} disabled={isSubmitting}>
+                            <Text style={[styles.outlineButtonText, { color: '#ccc'/* Adjusted for gradient */}]}>Cancel</Text>
                         </Pressable>
-                        {allImageUris.length === 0 && form.formState.isSubmitted /* Show only if trying to submit without photos */ && <Text style={styles.errorText}>Please add at least one photo.</Text>}
+                        <Pressable
+                            style={[styles.button, styles.submitButton, (isSubmitting || allImageUris.length === 0) ? styles.buttonDisabled : {} ]}
+                            onPress={handleSubmit(onSubmit)}
+                            disabled={isSubmitting || allImageUris.length === 0}
+                        >
+                            {isSubmitting ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }}/> : null}
+                            <Text style={styles.buttonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
+                        </Pressable>
                     </View>
-                    <View style={styles.imageGrid}>
-                        {allImageUris.map((uri) => (
-                            <View key={uri} style={styles.imageContainer}>
-                                <Image source={{ uri: uri }} style={styles.imagePreview} />
-                                <Pressable
-                                    style={styles.removeImageButton}
-                                    onPress={() => removeImage(uri)}
-                                    disabled={isSubmitting}
-                                >
-                                    <Ionicons name="close-circle" size={28} color="#fff" style={styles.removeImageIcon} />
-                                </Pressable>
-                            </View>
-                        ))}
-                    </View>
-                </View>
 
-                {/* Submit Button */}
-                <View style={styles.buttonContainer}>
-                    <Pressable style={[styles.button, styles.outlineButton, styles.cancelButton]} onPress={() => navigation.goBack()} disabled={isSubmitting}>
-                        <Text style={[styles.outlineButtonText, { color: '#555'}]}>Cancel</Text>
-                    </Pressable>
-                    <Pressable
-                        style={[styles.button, styles.submitButton, (isSubmitting || allImageUris.length === 0) ? styles.buttonDisabled : {} ]}
-                        onPress={handleSubmit(onSubmit)}
-                        disabled={isSubmitting || allImageUris.length === 0}
-                    >
-                        {isSubmitting ? <ActivityIndicator color="#fff" style={{ marginRight: 8 }}/> : null}
-                        <Text style={styles.buttonText}>{isSubmitting ? 'Saving...' : 'Save Changes'}</Text>
-                    </Pressable>
-                </View>
-
-            </ScrollView>
-            <Toast />
-        </SafeAreaView>
+                </ScrollView>
+                <Toast />
+            </SafeAreaView>
+        </LinearGradient>
+        // ***** MODIFICATION END *****
     );
 };
 
-// --- Styles --- (Keep existing styles)
+// --- Styles ---
+// Original styles are preserved and new styles/adjustments are added
 const styles = StyleSheet.create({
-    safeArea: { flex: 1, backgroundColor: '#f8f9fa' },
-    scrollView: { flex: 1 },
+    // ***** MODIFICATION START: Added from ProfileBrowseScreen & adjusted *****
+    gradientFullScreen: {
+        flex: 1,
+    },
+    safeAreaTransparent: { // Used for SafeAreaView inside LinearGradient
+        flex: 1,
+        backgroundColor: 'transparent', // Important
+    },
+    headerContainer: { // Adapted from ProfileBrowseScreen
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        // paddingHorizontal: 15, // Moved to headerDynamicStyle
+        // paddingVertical: -20, // This was unusual, adjusted in headerDynamicStyle
+        minHeight: 50, // Adjusted from 100 to be more compact for this screen
+        zIndex: 20,
+    },
+    headerButton: { // Adapted from ProfileBrowseScreen
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)', // Slightly more subtle
+        marginHorizontal: 5, // Added margin for spacing
+    },
+    // headerButtonText: { // Not directly used for icon buttons, but kept if text is added
+    //     color: 'white',
+    //     fontSize: 14,
+    //     fontWeight: '600',
+    // },
+    loadingText: { // For loading states on gradient
+        marginTop: 10,
+        fontSize: 16,
+        color: '#FFFFFF',
+    },
+    infoText: { // For info states on gradient
+        textAlign: 'center',
+        fontSize: 16,
+        color: 'white',
+        paddingHorizontal: 20,
+        marginBottom: 20,
+    },
+    // ***** MODIFICATION END *****
+
+    // Original styles with necessary adjustments for gradient:
+    safeArea: { flex: 1, backgroundColor: '#f8f9fa' }, // Kept for reference, but safeAreaTransparent is used
+    scrollView: { flex: 1 /* backgroundColor: 'transparent' - handled by safeAreaTransparent */ },
     contentContainer: { padding: 20, paddingBottom: 40 },
     centered: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 20 },
-    headerTitle: { fontSize: 28, fontWeight: 'bold', marginBottom: 24, color: '#333', textAlign: 'center' },
-    section: { marginBottom: 24, backgroundColor: '#fff', borderRadius: 8, padding: 16, shadowColor: "#000", shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.18, shadowRadius: 1.00, elevation: 1, },
-    sectionTitle: { fontSize: 20, fontWeight: '600', marginBottom: 16, color: '#444', borderBottomWidth: 1, borderBottomColor: '#eee', paddingBottom: 8 },
+    headerTitle: { // Original headerTitle, now used in the new header structure
+        fontSize: 22, // Slightly smaller to fit with buttons
+        fontWeight: 'bold',
+        color: '#FFFFFF', // Adjusted for gradient
+        textAlign: 'center',
+        flex: 1, // Allow title to take available space and center
+    },
+    section: {
+        marginBottom: 24,
+        backgroundColor: 'rgba(255, 255, 255, 0.1)', // MODIFIED for gradient visibility (frosted glass effect)
+        borderRadius: 8,
+        padding: 16,
+        // Shadow might not be very visible on dark gradient, consider removing or adjusting
+        shadowColor: "#000",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.1, // Reduced opacity
+        shadowRadius: 1.00,
+        elevation: 1,
+    },
+    sectionTitle: {
+        fontSize: 20, fontWeight: '600', marginBottom: 16,
+        color: '#FFFFFF', // MODIFIED for gradient
+        borderBottomWidth: 1,
+        borderBottomColor: 'rgba(255, 255, 255, 0.3)', // MODIFIED for gradient
+        paddingBottom: 8
+    },
     inputGroup: { marginBottom: 16 },
-    label: { fontSize: 14, fontWeight: '500', color: '#555', marginBottom: 6 },
-    input: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 10, fontSize: 16, backgroundColor: '#fff' },
+    label: {
+        fontSize: 14, fontWeight: '500',
+        color: '#DDDDDD', // MODIFIED for gradient
+        marginBottom: 6
+    },
+    input: {
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)', // MODIFIED for gradient
+        borderRadius: 6, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+        fontSize: 16,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)', // MODIFIED for gradient
+        color: '#FFFFFF', // MODIFIED for text input color
+    },
     textArea: { height: 100, textAlignVertical: 'top' },
-    errorText: { fontSize: 12, color: 'red', marginTop: 4 },
-    placeholderText: { color: '#999' },
-    dateButton: { flexDirection: 'row', alignItems: 'center', borderWidth: 1, borderColor: '#ccc', borderRadius: 6, paddingHorizontal: 12, minHeight: 44, backgroundColor: '#fff' },
-    dateIcon: { marginRight: 8 },
-    dateText: { fontSize: 16, color: '#333'},
-    pickerPlaceholder: { borderWidth: 1, borderColor: '#ccc', borderRadius: 6, /*paddingHorizontal: 12,*/ backgroundColor: '#fff', minHeight: 44, justifyContent: 'center' }, // input inside already has padding
+    errorText: { fontSize: 12, color: '#FF9494', marginTop: 4 }, // Adjusted red for better visibility on dark gradient
+    placeholderText: { color: '#BBBBBB' /* Adjusted for gradient inputs */ },
+    dateButton: {
+        flexDirection: 'row', alignItems: 'center', borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)', // MODIFIED
+        borderRadius: 6, paddingHorizontal: 12, minHeight: 44,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)' // MODIFIED
+    },
+    dateIcon: { marginRight: 8 /* color already set by Ionicons prop */ },
+    dateText: {
+        fontSize: 16,
+        color: '#FFFFFF' // MODIFIED
+    },
+    pickerPlaceholder: { // Container for TextInput used as picker
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.4)', // MODIFIED
+        borderRadius: 6,
+        backgroundColor: 'rgba(255, 255, 255, 0.15)', // MODIFIED
+        minHeight: 44, justifyContent: 'center'
+    },
     interestInputContainer: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    interestInput: { flex: 1 },
-    addButton: { paddingHorizontal: 16, height: 44, justifyContent: 'center', backgroundColor: '#FF6347', borderRadius: 6 },
+    interestInput: { flex: 1 /* Styles inherited from .input */ },
+    addButton: { // This button style is quite distinct, should work on gradient
+        paddingHorizontal: 16, height: 44, justifyContent: 'center',
+        backgroundColor: '#FF6347', // Primary action color
+        borderRadius: 6
+    },
     badgeContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 8 },
-    badge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6347', borderRadius: 15, paddingVertical: 5, paddingLeft: 10, paddingRight: 4, },
+    badge: { // Badge style should work well
+        flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6347',
+        borderRadius: 15, paddingVertical: 5, paddingLeft: 10, paddingRight: 4,
+    },
     badgeText: { color: '#fff', fontSize: 14, marginRight: 4 },
     removeBadgeButton: { padding: 2 },
     imageGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 10 },
     imageContainer: {
-        width: '30%', 
-        aspectRatio: 1,
+        width: '30%', aspectRatio: 1,
         borderWidth: 1,
-        borderColor: '#eee',
-        borderRadius: 6,
-        overflow: 'hidden',
-        backgroundColor: '#f0f0f0',
+        borderColor: 'rgba(255, 255, 255, 0.2)', // MODIFIED
+        borderRadius: 6, overflow: 'hidden',
+        backgroundColor: 'rgba(0,0,0,0.2)', // MODIFIED
         position: 'relative',
-       },
+    },
     imagePreview: { width: '100%', height: '100%' },
-    removeImageButton: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.6)', borderRadius: 14, width: 28, height: 28, justifyContent: 'center', alignItems: 'center', zIndex: 1 },
+    removeImageButton: { position: 'absolute', top: 4, right: 4, backgroundColor: 'rgba(0,0,0,0.7)', borderRadius: 14, width: 28, height: 28, justifyContent: 'center', alignItems: 'center', zIndex: 1 },
     removeImageIcon: { /* Icon styles if needed */ },
-    buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: '#eee', gap: 16 },
+    buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', gap: 16 }, // MODIFIED borderTopColor
     button: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 100, flex: 1 },
     buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
-    submitButton: { backgroundColor: '#FF6347', },
-    outlineButton: { borderWidth: 1, borderColor: '#FF6347', backgroundColor: '#fff', },
-    outlineButtonText: { color: '#FF6347', fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
-    cancelButton: { borderColor: '#aaa', },
+    submitButton: { backgroundColor: '#FF6347', }, // Main action button
+    outlineButton: { // For "Select New Images" and "Cancel"
+        borderWidth: 1,
+        borderColor: '#FF6347', // Original orange for image selection
+        backgroundColor: 'rgba(255,255,255,0.1)', // MODIFIED for gradient
+    },
+    outlineButtonText: { // For "Select New Images"
+        color: '#FFDDC1', // Lighter orange for text on semi-transparent bg
+        fontSize: 16, fontWeight: 'bold', textAlign: 'center'
+    },
+    cancelButton: { // Specifically for the bottom cancel button
+        borderColor: 'rgba(255,255,255,0.5)', // Lighter border for cancel on gradient
+    },
+    // outlineButtonText color for Cancel button is directly set to #ccc in JSX
     buttonDisabled: { backgroundColor: '#cccccc', borderColor: '#cccccc', opacity: 0.7 },
 });
 
