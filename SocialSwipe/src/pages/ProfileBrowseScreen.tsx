@@ -373,7 +373,7 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 15,
-        paddingVertical: -20, // This seems unusual, typically padding is positive
+        paddingVertical: -26, // This seems unusual, typically padding is positive
         minHeight: 100,
         zIndex: 20,
     },
