@@ -5,9 +5,12 @@ import {
     Text,
     StyleSheet,
     FlatList,
-    SafeAreaView,
+    // SafeAreaView, // Will use custom SafeAreaView handling with insets
     Pressable,
     ActivityIndicator,
+    Platform, // Added for platform-specific styling
+    Image, // Added for potential sender avatar
+    Alert, // Added in case we need it for future actions
 } from 'react-native';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { supabase } from '../lib/supabaseClient'; // Make sure this path is correct
@@ -16,25 +19,31 @@ import { supabase } from '../lib/supabaseClient'; // Make sure this path is corr
 import { NavigationProp } from '@react-navigation/native';
 import { RootStackParamList } from '../navigation/AppNavigator'; // Adjust path to your RootStackParamList
 
+// Added imports from EditProfileScreen for styling
+import { LinearGradient } from 'expo-linear-gradient';
+import { useSafeAreaInsets, SafeAreaView } from 'react-native-safe-area-context'; // Import SafeAreaView from here
+import { Ionicons } from '@expo/vector-icons';
+
 // Define the structure of a notification item, including sender details
 interface NotificationItem {
     id: string; // Notification ID
-    type: 'like' | 'match' | 'system_update' | string; // Allow for types in DB and others
-    title: string; // Dynamic title, e.g., "New Like from John!"
-    body: string;  // Dynamic body, e.g., "John Doe liked your profile."
+    type: 'like' | 'match' | 'system_update' | string;
+    title: string;
+    body: string;
     timestamp: Date;
     read: boolean;
-    sender_user_id?: string; // ID of the user who sent the like/match
-    sender_full_name?: string;
-    sender_profile_photo_url?: string | null;
-    // related_entity_id?: string; // Optional: If you need to navigate to a specific match entity, etc.
+    sender_user_id?: string;
+    sender_first_name?: string; // Changed from sender_full_name to match typical profile data
+    sender_profile_picture_url?: string | null; // Changed to singular, assuming we'll use the first one
+    // related_entity_id?: string;
 }
 
 // Define the navigation prop type for this screen
-type NotificationsScreenNavigationProp = NavigationProp<RootStackParamList>;
+type NotificationsScreenNavigationProp = NavigationProp<RootStackParamList, 'Notifications'>; // Assuming 'Notifications' is a route in RootStackParamList
 
 export default function NotificationsScreen() {
     const navigation = useNavigation<NotificationsScreenNavigationProp>();
+    const insets = useSafeAreaInsets(); // For dynamic padding like in EditProfileScreen
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -51,12 +60,6 @@ export default function NotificationsScreen() {
             }
             const currentUserId = user.id;
 
-            // Fetch notifications for the current user.
-            // The 'sender_user_id' column in 'notifications' is a foreign key
-            // to 'individual_profiles.user_id'.
-            // PostgREST syntax `senderProfile:sender_user_id(full_name, profile_photo_url)`
-            // tells Supabase to use the 'sender_user_id' foreign key to fetch related data
-            // from the 'individual_profiles' table and nest it under 'senderProfile'.
             const { data: fetchedNotifications, error: fetchError } = await supabase
                 .from('notifications')
                 .select(`
@@ -64,10 +67,10 @@ export default function NotificationsScreen() {
                     type,
                     created_at,
                     read,
-                    message, 
+                    message,
                     related_entity_id,
-                    sender_user_id, 
-                    senderProfile:sender_user_id ( 
+                    sender_user_id,
+                    senderProfile:sender_user_id (
                         first_name,
                         profile_pictures
                     )
@@ -82,9 +85,9 @@ export default function NotificationsScreen() {
 
             if (fetchedNotifications) {
                 const transformedNotifications: NotificationItem[] = fetchedNotifications.map((n: any) => {
-                    const senderName = n.senderProfile?.full_name || 'Someone';
-                    let title = n.message || 'New Notification'; // Use pre-generated message if available
-                    let body = ''; // Body will be more specific or also from n.message
+                    const senderName = n.senderProfile?.first_name || 'Someone';
+                    let title = n.message || 'New Notification';
+                    let body = '';
 
                     if (n.type === 'like') {
                         title = n.message || `New Like from ${senderName}!`;
@@ -96,11 +99,9 @@ export default function NotificationsScreen() {
                         title = 'System Update';
                         body = n.message || 'Important information regarding your account or the app.';
                     }
-                    // If body is empty and title was based on senderName, set a default body or use title as body.
                     if (!body && (n.type === 'like' || n.type === 'match') && !n.message) {
-                        body = title; // Or a more generic message
+                        body = title;
                     }
-
 
                     return {
                         id: n.id,
@@ -110,8 +111,8 @@ export default function NotificationsScreen() {
                         timestamp: new Date(n.created_at),
                         read: n.read,
                         sender_user_id: n.sender_user_id,
-                        sender_full_name: n.senderProfile?.full_name,
-                        sender_profile_photo_url: n.senderProfile?.profile_photo_url,
+                        sender_first_name: n.senderProfile?.first_name,
+                        sender_profile_picture_url: n.senderProfile?.profile_pictures?.[0] || null, // Use first picture
                     };
                 });
                 setNotifications(transformedNotifications);
@@ -128,7 +129,6 @@ export default function NotificationsScreen() {
         }
     }, []);
 
-    // Use useFocusEffect to re-fetch notifications when the screen comes into focus
     useFocusEffect(
         useCallback(() => {
             fetchNotifications();
@@ -138,7 +138,6 @@ export default function NotificationsScreen() {
     const handleNotificationPress = async (item: NotificationItem) => {
         console.log('Notification pressed:', item.id, 'Type:', item.type, 'Sender ID:', item.sender_user_id);
 
-        // Mark notification as read in the backend
         if (!item.read) {
             try {
                 const { error: updateError } = await supabase
@@ -148,26 +147,33 @@ export default function NotificationsScreen() {
 
                 if (updateError) {
                     console.error('Error marking notification as read:', updateError);
-                    // Optionally, revert local state or show an error
                 } else {
-                    // Update local state to reflect read status immediately
                     setNotifications(prevNotifications =>
                         prevNotifications.map(n =>
                             n.id === item.id ? { ...n, read: true } : n
                         )
                     );
                 }
-            } catch (error) {
-                console.error('Failed to update notification read status:', error);
+            } catch (err) {
+                console.error('Failed to update notification read status:', err);
             }
         }
 
-        // Navigate based on notification type
-        // For 'like' or 'match', navigate to the sender's profile if sender_user_id exists.
         if ((item.type === 'like' || item.type === 'match') && item.sender_user_id) {
-            navigation.navigate('ProfileDetail', { userId: item.sender_user_id });
+             // Ensure 'ProfileDetail' exists in your RootStackParamList and accepts userId
+            if (navigation.getState().routeNames.includes('ProfileDetail')) {
+                navigation.navigate('ProfileDetail' as any, { userId: item.sender_user_id });
+            } else {
+                console.warn("ProfileDetail screen not found in navigator. Cannot navigate.");
+            }
         }
-        // Add other navigation logic for different types if needed (e.g., 'system_update' might not navigate)
+    };
+
+    const headerDynamicStyle = {
+        paddingTop: insets.top, // MODIFIED LINE: Reduced top padding
+        paddingBottom: 10,
+        paddingLeft: insets.left + 15,
+        paddingRight: insets.right + 15,
     };
 
     const renderNotificationItem = ({ item }: { item: NotificationItem }) => (
@@ -175,16 +181,13 @@ export default function NotificationsScreen() {
             style={[styles.notificationItem, !item.read && styles.unreadItem]}
             onPress={() => handleNotificationPress(item)}
         >
-            {/* TODO: Optionally, add an Image component here for item.sender_profile_photo_url */}
-            {/* Example: 
-                {item.sender_profile_photo_url && (
-                    <Image 
-                        source={{ uri: item.sender_profile_photo_url }} 
-                        style={styles.senderAvatar} 
-                        onError={(e) => console.log("Failed to load image:", e.nativeEvent.error)}
-                    />
-                )}
-            */}
+            {item.sender_profile_picture_url && (
+                <Image
+                    source={{ uri: item.sender_profile_picture_url }}
+                    style={styles.senderAvatar}
+                    onError={(e) => console.log("Failed to load sender image:", e.nativeEvent.error)}
+                />
+            )}
             <View style={styles.notificationTextContainer}>
                 <Text style={styles.notificationTitle}>{item.title}</Text>
                 {item.body ? <Text style={styles.notificationBody} numberOfLines={2}>{item.body}</Text> : null}
@@ -194,66 +197,104 @@ export default function NotificationsScreen() {
         </Pressable>
     );
 
-    if (loading && notifications.length === 0) { // Show loading only on initial load
+    if (loading && notifications.length === 0) {
         return (
-            <SafeAreaView style={styles.safeArea}>
-                <View style={styles.centered}>
-                    <ActivityIndicator size="large" color="#FF6347" />
+            <LinearGradient colors={['#fe9494', '#00008b']} style={styles.gradientFullScreen}>
+                <SafeAreaView style={[styles.safeAreaTransparent, styles.centered]}>
+                    <ActivityIndicator size="large" color="#FFFFFF" />
                     <Text style={styles.loadingText}>Loading notifications...</Text>
-                </View>
-            </SafeAreaView>
+                </SafeAreaView>
+            </LinearGradient>
         );
     }
 
-    if (!loading && error) {
-        return (
-            <SafeAreaView style={styles.safeArea}>
-                 <Text style={styles.headerTitle}>Notifications</Text>
-                <View style={styles.centered}>
-                    <Text style={styles.noNotificationsText}>Error loading notifications.</Text>
-                    <Text style={styles.errorTextDetail}>{error}</Text>
-                    <Pressable onPress={fetchNotifications} style={styles.retryButton}>
-                        <Text style={styles.retryButtonText}>Try Again</Text>
-                    </Pressable>
-                </View>
-            </SafeAreaView>
-        );
-    }
-
-    if (!loading && notifications.length === 0) {
-        return (
-            <SafeAreaView style={styles.safeArea}>
-                 <Text style={styles.headerTitle}>Notifications</Text>
-                <View style={styles.centered}>
-                    <Text style={styles.noNotificationsText}>You have no notifications yet.</Text>
-                </View>
-            </SafeAreaView>
-        );
-    }
 
     return (
-        <SafeAreaView style={styles.safeArea}>
-            <Text style={styles.headerTitle}>Notifications</Text>
-            <FlatList
-                data={notifications}
-                renderItem={renderNotificationItem}
-                keyExtractor={(item) => item.id}
-                contentContainerStyle={styles.listContentContainer}
-                refreshControl={
-                    <ActivityIndicator animating={loading && notifications.length > 0} color="#FF6347" />
-                }
-            />
-        </SafeAreaView>
+        <LinearGradient colors={['#fe9494', '#00008b']} style={styles.gradientFullScreen}>
+            <SafeAreaView style={styles.safeAreaTransparent}>
+                <View style={[styles.headerContainer, headerDynamicStyle]}>
+                    <Pressable onPress={() => navigation.canGoBack() ? navigation.goBack() : null} style={styles.headerButton}>
+                        <Ionicons name="arrow-back" size={24} color="#fff" />
+                    </Pressable>
+                    <Text style={styles.headerTitle}>Notifications</Text>
+                    {/* Placeholder for a potential right-side header button if needed in the future */}
+                    <View style={{ width: 48 }} /> 
+                </View>
+
+                {error && !loading && ( // Show error only if not loading and error exists
+                     <View style={styles.centeredContent}>
+                         <Text style={styles.noNotificationsText}>Error loading notifications.</Text>
+                         <Text style={styles.errorTextDetail}>{error}</Text>
+                         <Pressable onPress={fetchNotifications} style={styles.retryButton}>
+                             <Text style={styles.retryButtonText}>Try Again</Text>
+                         </Pressable>
+                    </View>
+                )}
+
+                {!error && !loading && notifications.length === 0 && (
+                    <View style={styles.centeredContent}>
+                        <Ionicons name="notifications-off-outline" size={60} color="rgba(255,255,255,0.7)" />
+                        <Text style={styles.noNotificationsText}>You have no notifications yet.</Text>
+                    </View>
+                )}
+                
+                {!error && notifications.length > 0 && (
+                    <FlatList
+                        data={notifications}
+                        renderItem={renderNotificationItem}
+                        keyExtractor={(item) => item.id}
+                        contentContainerStyle={styles.listContentContainer}
+                        ListFooterComponent={loading && notifications.length > 0 ? <ActivityIndicator color="#FFFFFF" style={{ marginVertical: 20}} /> : null }
+                        // The refreshControl prop on FlatList is tricky with gradients.
+                        // For a pull-to-refresh indicator, you might need a more custom setup or accept system default.
+                        // A simple loading indicator at the bottom (ListFooterComponent) is used for subsequent loads.
+                        onRefresh={fetchNotifications} // Optional: if you want pull to refresh
+                        refreshing={loading && notifications.length > 0} // Show indicator during refresh
+                    />
+                )}
+            </SafeAreaView>
+        </LinearGradient>
     );
 }
 
 const styles = StyleSheet.create({
-    safeArea: {
+    gradientFullScreen: {
         flex: 1,
-        backgroundColor: '#F0F2F5',
     },
-    centered: {
+    safeAreaTransparent: {
         flex: 1,
+        backgroundColor: 'transparent',
+    },
+    headerContainer: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        minHeight: 50,
+        zIndex: 10,
+        // paddingHorizontal and paddingTop/Bottom are in headerDynamicStyle
+    },
+    headerButton: {
+        paddingVertical: 8,
+        paddingHorizontal: 12,
+        borderRadius: 20,
+        backgroundColor: 'rgba(255, 255, 255, 0.2)',
+        marginHorizontal: 5,
+    },
+    headerTitle: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: '#FFFFFF',
+        textAlign: 'center',
+        flex: 1,
+    },
+    centered: { // For full screen centered content (initial load)
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 20,
+    },
+    centeredContent: { // For centered content within the list area (no notifications, error)
+        flex: 1, // Takes remaining space
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
@@ -261,95 +302,94 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 10,
         fontSize: 16,
-        color: '#333',
+        color: '#FFFFFF',
     },
     noNotificationsText: {
         fontSize: 18,
-        color: '#666',
+        color: 'rgba(255,255,255,0.8)', // Light color for gradient
         textAlign: 'center',
+        marginTop:10,
     },
     errorTextDetail: {
         fontSize: 14,
-        color: '#D32F2F', 
+        color: '#FF9494', // Adjusted red for better visibility on dark gradient
         textAlign: 'center',
         marginTop: 5,
         marginBottom: 15,
     },
     retryButton: {
-        backgroundColor: '#FF6347',
+        backgroundColor: '#FF6347', // Consistent with EditProfile action color
         paddingVertical: 10,
-        paddingHorizontal: 20,
-        borderRadius: 20,
+        paddingHorizontal: 25,
+        borderRadius: 25,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 2,
     },
     retryButtonText: {
         color: '#FFFFFF',
         fontSize: 16,
         fontWeight: 'bold',
     },
-    headerTitle: {
-        fontSize: 26,
-        fontWeight: 'bold',
-        color: '#1c1c1e',
-        paddingHorizontal: 15,
-        paddingTop: 20,
-        paddingBottom: 10,
-        backgroundColor: '#F0F2F5', 
-    },
     listContentContainer: {
-        paddingHorizontal: 10,
-        paddingBottom: 20,
+        paddingHorizontal: 15, // Adjusted from 10
+        paddingBottom: 20, // Ensure space at the bottom
     },
     notificationItem: {
-        backgroundColor: '#FFFFFF',
+        backgroundColor: 'rgba(255, 255, 255, 0.1)', // Frosted glass effect
         paddingVertical: 15,
         paddingHorizontal: 20,
-        marginVertical: 6,
+        marginVertical: 8, // Increased margin
         borderRadius: 12,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        shadowColor: '#000000',
-        shadowOffset: { width: 0, height: 1 }, 
-        shadowOpacity: 0.05,
-        shadowRadius: 3,
-        elevation: 2, 
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
+        // Removed direct shadow as it might not look good on gradient, border gives definition
     },
     unreadItem: {
-        backgroundColor: '#E9F5FF', 
+        backgroundColor: 'rgba(255, 255, 255, 0.15)', // Slightly different for unread
         borderLeftWidth: 4,
-        borderLeftColor: '#FF6347',
+        borderLeftColor: '#FFDDC1', // Lighter accent for unread, or use #FF6347
+        // borderColor: 'rgba(255, 221, 193, 0.5)', // Brighter border for unread if desired
     },
-    // Optional: Style for sender avatar if you add it
-    // senderAvatar: {
-    //     width: 40,
-    //     height: 40,
-    //     borderRadius: 20,
-    //     marginRight: 15,
-    // },
+    senderAvatar: {
+        width: 45, // Slightly larger
+        height: 45,
+        borderRadius: 22.5, // Half of width/height
+        marginRight: 15,
+        backgroundColor: 'rgba(255,255,255,0.2)', // Placeholder bg
+        borderWidth: 1,
+        borderColor: 'rgba(255,255,255,0.3)',
+    },
     notificationTextContainer: {
         flex: 1,
-        marginRight: 10, 
+        marginRight: 10,
     },
     notificationTitle: {
         fontSize: 17,
         fontWeight: '600',
-        color: '#2c3e50',
+        color: '#FFFFFF', // White for gradient
         marginBottom: 4,
     },
     notificationBody: {
         fontSize: 15,
-        color: '#34495e',
+        color: '#E0E0E0', // Lighter gray for gradient
         lineHeight: 20,
     },
     notificationTimestamp: {
         fontSize: 12,
-        color: '#7f8c8d',
+        color: '#B0B0B0', // Light gray for gradient
         marginTop: 8,
     },
     unreadDot: {
         width: 10,
         height: 10,
         borderRadius: 5,
-        backgroundColor: '#FF6347',
+        backgroundColor: '#FF6347', // Action color for dot, stands out
+        marginLeft: 5, // Added some space if avatar is not present
     },
 });
