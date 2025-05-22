@@ -3,41 +3,55 @@ import {
   View,
   Text,
   ScrollView,
-  // Image, // Image component is not used if you are only using placeholders
+  Image, // Uncommented: Image component is needed for navImage
   TouchableOpacity,
   StyleSheet,
   Dimensions,
   SafeAreaView,
   Platform,
-  StatusBar, // Make sure StatusBar is imported
+  StatusBar,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient'; // Import LinearGradient
+import { LinearGradient } from 'expo-linear-gradient';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-// Assuming RootStackParamList is defined in a types file in the parent directory or a shared types folder
 // Adjust the import path as per your project structure.
-// For example: import type { RootStackParamList } from '../App'; or import type { RootStackParamList } from '../navigationTypes';
 import type { RootStackParamList } from '../types/navigation'; // ** IMPORTANT: Adjust this import path **
+import navImage from '../assets/nav.png'; // Assuming this path is correct relative to this file
 
 // Get screen dimensions
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Define the structure for each welcome slide
-interface WelcomeSlide {
+// Define the structure for each welcome slide using a discriminated union
+interface BaseSlide {
   key: string;
   title: string;
   description: string;
+}
+
+interface PlaceholderSlide extends BaseSlide {
   imagePlaceholder: {
     text: string;
     width: number;
     height: number;
     backgroundColor: string;
   };
+  image?: undefined; // Explicitly state that image is not on this type
+  width?: undefined; // Explicitly state that root width is not for this type
+  height?: undefined; // Explicitly state that root height is not for this type
 }
+
+interface ImageSlide extends BaseSlide {
+  image: any; // In React Native, this is typically ImageSourcePropType, using 'any' for simplicity from your example
+  width: number; // Width for the actual image
+  height: number; // Height for the actual image
+  imagePlaceholder?: undefined; // Explicitly state that imagePlaceholder is not on this type
+}
+
+type WelcomeSlideType = PlaceholderSlide | ImageSlide;
 
 // Content for the welcome slides
 const APP_NAME = "Sphere"; // You can change this
 
-const slides: WelcomeSlide[] = [
+const slides: WelcomeSlideType[] = [
   {
     key: '1',
     title: `Welcome to ${APP_NAME}!`,
@@ -74,17 +88,14 @@ const slides: WelcomeSlide[] = [
       backgroundColor: '#90EE90', // Light Green
     },
   },
-  {
+  { // This slide uses an actual image
     key: '4',
     title: "Take it Offline with IRL Mode!",
     description:
       `Once you're at the venue, confirm your arrival to activate 'IRL Mode' on ${APP_NAME}. Focus on real-world interactions, knowing who's open to connecting right there, right now. (Location sharing is always your choice!)`,
-    imagePlaceholder: {
-      text: 'IRL Mode Active UI',
-      width: SCREEN_WIDTH * 0.8,
-      height: SCREEN_HEIGHT * 0.3,
-      backgroundColor: '#FFB6C1', // Light Pink
-    },
+    image: navImage, // Use the imported image
+    width: SCREEN_WIDTH * 0.8, // Width for the actual image
+    height: SCREEN_HEIGHT * 0.3, // Height for the actual image
   },
   {
     key: '5',
@@ -115,15 +126,15 @@ const slides: WelcomeSlide[] = [
 // Props for the WelcomeScreen component
 interface WelcomeScreenProps {
   navigation: NativeStackNavigationProp<RootStackParamList, 'WelcomeScreen'>;
-  // onWelcomeComplete: () => Promise<void>; // Removed: No longer passed from App.tsx
 }
 
-const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => { // Removed onWelcomeComplete from destructured props
+const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const scrollViewRef = useRef<ScrollView>(null);
 
   const onScroll = (event: any) => {
-    const slideSize = event.nativeEvent.layoutMeasurement.width;
+    // Using SCREEN_WIDTH for slideSize as slides are screen-width
+    const slideSize = SCREEN_WIDTH; 
     const contentOffset = event.nativeEvent.contentOffset.x;
     const newIndex = Math.round(contentOffset / slideSize);
     if (newIndex !== currentIndex) {
@@ -142,30 +153,29 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => { // Rem
   };
 
   const handleSignUp = async () => {
-    // await onWelcomeComplete(); // Removed: This was causing the error as it's no longer passed
     if (navigation && navigation.navigate) {
-      navigation.navigate('CreateAccount'); // This should now execute
+      navigation.navigate('CreateAccount');
     } else {
       console.warn('WelcomeScreen: Navigation prop is not available or navigate function is missing.');
     }
   };
 
   const backgroundGradientColors = ['#fe9494', '#00008b'];
-  const buttonGradientColors = [...backgroundGradientColors].reverse(); // Reversed for buttons
+  const buttonGradientColors = [...backgroundGradientColors].reverse();
 
   return (
     <View style={styles.fullScreenGradientContainer}>
       <LinearGradient
-        colors={backgroundGradientColors} // Red to Dark Midnight Blue
-        start={{ x: 0, y: 0.5 }} // Gradient from left
-        end={{ x: 1, y: 0.5 }}   // Gradient to right
-        style={StyleSheet.absoluteFillObject} // Fills the container
+        colors={backgroundGradientColors}
+        start={{ x: 0, y: 0.5 }}
+        end={{ x: 1, y: 0.5 }}
+        style={StyleSheet.absoluteFillObject}
       />
       <SafeAreaView style={styles.safeArea}>
         <StatusBar
-          barStyle="light-content" // For dark backgrounds
-          backgroundColor="transparent" // Make status bar transparent
-          translucent={true} // Allow content (gradient) to draw behind status bar on Android
+          barStyle="light-content"
+          backgroundColor="transparent"
+          translucent={true}
         />
         <ScrollView
           ref={scrollViewRef}
@@ -173,25 +183,37 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => { // Rem
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={onScroll}
-          scrollEventThrottle={16}
+          scrollEventThrottle={16} // Standard value for smooth scroll tracking
           style={styles.scrollView}
           contentContainerStyle={styles.scrollViewContent}
         >
-          {slides.map((slide) => (
+          {slides.map((slide: WelcomeSlideType) => ( // Added type annotation for slide
             <View key={slide.key} style={styles.slide}>
               <View style={styles.imageContainer}>
-                <View
-                  style={[
-                    styles.placeholderImage,
-                    {
-                      width: slide.imagePlaceholder.width,
-                      height: slide.imagePlaceholder.height,
-                      backgroundColor: slide.imagePlaceholder.backgroundColor,
-                    },
-                  ]}
-                >
-                  <Text style={styles.placeholderText}>{slide.imagePlaceholder.text}</Text>
-                </View>
+                {slide.imagePlaceholder ? ( // Check if it's a PlaceholderSlide
+                  <View
+                    style={[
+                      styles.placeholderImage,
+                      {
+                        width: slide.imagePlaceholder.width,
+                        height: slide.imagePlaceholder.height,
+                        backgroundColor: slide.imagePlaceholder.backgroundColor,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.placeholderText}>{slide.imagePlaceholder.text}</Text>
+                  </View>
+                ) : slide.image ? ( // Check if it's an ImageSlide
+                  <Image
+                    source={slide.image}
+                    style={{
+                      width: slide.width,
+                      height: slide.height,
+                      borderRadius: 15, // Added borderRadius for consistency with placeholder
+                    }}
+                    resizeMode="contain" // Or "cover", "stretch", etc. as needed
+                  />
+                ) : null}
               </View>
               <View style={styles.textContainer}>
                 <Text style={styles.title}>{slide.title}</Text>
@@ -249,28 +271,28 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent',
+    backgroundColor: 'transparent', // Ensure SafeAreaView doesn't obscure the gradient
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   scrollView: {
     flex: 1,
   },
   scrollViewContent: {
-    // No changes needed here
+    // No specific changes needed here, but ensure it allows full height content if necessary
   },
   slide: {
     width: SCREEN_WIDTH,
-    height: '100%',
+    // height: '100%', // Removed to let content define height, useful if imageContainer + textContainer have defined heights or flex
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'center', // Vertically center content in the slide
     paddingHorizontal: 20,
-    paddingBottom: 120, // Adjusted to ensure content visible above bottomControls
+    paddingBottom: 120, // Space for bottomControls
   },
   imageContainer: {
-    width: '100%',
-    alignItems: 'center',
-    justifyContent: 'center',
-    maxHeight: SCREEN_HEIGHT * 0.35,
+    width: '100%', // Ensure it takes available width
+    alignItems: 'center', // Center the image/placeholder horizontally
+    justifyContent: 'center', // Center vertically if it has fixed height
+    // maxHeight: SCREEN_HEIGHT * 0.35, // This can be useful, or controlled by individual image/placeholder heights
     marginBottom: 20,
   },
   placeholderImage: {
@@ -279,49 +301,52 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#DDDDDD',
+    // width and height will be applied from slide data
   },
   placeholderText: {
     fontSize: 16,
-    color: '#FFFFF0',
+    color: '#FFFFF0', // Ivory, for better contrast on various placeholder backgrounds
     fontWeight: 'bold',
     textAlign: 'center',
     padding: 10,
   },
+  // actualImage: { // If you need specific styles for the Image component not covered by inline style
+  //   borderRadius: 15,
+  // },
   textContainer: {
-    width: '100%',
-    alignItems: 'center',
-    paddingHorizontal: 10,
+    width: '100%', // Take full width for text alignment
+    alignItems: 'center', // Center title and description
+    paddingHorizontal: 10, // Padding within the text block
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFFFF0',
+    color: '#FFFFF0', // Ivory
     textAlign: 'center',
     marginBottom: 12,
   },
   description: {
     fontSize: 16,
-    color: '#FFFFF0',
+    color: '#FFFFF0', // Ivory
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: 10,
+    paddingHorizontal: 10, // Further padding if lines are long
   },
   bottomControls: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 120,
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
-    backgroundColor: 'transparent',
-    borderTopWidth: 0, // Removed border as it might not look good on gradient
+    height: 120, // Fixed height for the control area
+    justifyContent: 'center', // Primary axis (vertical)
+    alignItems: 'center', // Secondary axis (horizontal) for pagination
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20, // Safe area padding for bottom
+    backgroundColor: 'transparent', // Let gradient show through
   },
   pagination: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 20, // Space between dots and button
   },
   dot: {
     width: 10,
@@ -330,36 +355,36 @@ const styles = StyleSheet.create({
     marginHorizontal: 6,
   },
   dotActive: {
-    backgroundColor: '#FFFFFF', // Changed for better visibility on gradient
+    backgroundColor: '#FFFFFF',
   },
   dotInactive: {
-    backgroundColor: 'rgba(255, 255, 255, 0.5)', // Changed for better visibility on gradient
+    backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
-  button: { // Style for TouchableOpacity
+  button: { // TouchableOpacity
     borderRadius: 25,
     minWidth: SCREEN_WIDTH * 0.7,
+    maxWidth: SCREEN_WIDTH * 0.9, // Max width for very long text button
     height: 50,
-    overflow: 'hidden', // Crucial for borderRadius to clip the LinearGradient child
-    alignItems: 'center', // Center the LinearGradient if its minWidth is less than TouchableOpacity's width
-    justifyContent: 'center', // Center the LinearGradient if its minHeight is less than TouchableOpacity's height
-  },
-  signUpButton: {
-    // Add any specific layout adjustments for the sign-up button's TouchableOpacity here
-  },
-  buttonGradientWrapper: { // Style for the LinearGradient component inside the button
-    width: '100%', // Make the gradient fill the TouchableOpacity
-    height: '100%', // Make the gradient fill the TouchableOpacity
-    paddingVertical: 14,
-    paddingHorizontal: 35,
+    overflow: 'hidden', // Essential for border radius on gradient
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 25, // Also apply borderRadius here to be safe, though overflow:hidden on parent is key
+  },
+  signUpButton: {
+    minWidth: SCREEN_WIDTH * 0.85, // Slightly wider for longer text
+  },
+  buttonGradientWrapper: { // LinearGradient
+    width: '100%',
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20, // Padding inside the gradient for the text
+     // borderRadius: 25, // Already on parent, but good for redundancy if parent doesn't clip
   },
   buttonText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '600',
-    textAlign: 'center', // Ensure text is centered, especially for longer text in signUpButton
+    textAlign: 'center',
   },
 });
 

@@ -171,7 +171,7 @@ export default function NotificationsScreen() {
 
     const headerDynamicStyle = {
         paddingTop: insets.top, // MODIFIED LINE: Reduced top padding
-        paddingBottom: 10,
+        tpaddingBotom: 10,
         paddingLeft: insets.left + 15,
         paddingRight: insets.right + 15,
     };
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        minHeight: 50,
+        minHeight: 40,
         zIndex: 10,
         // paddingHorizontal and paddingTop/Bottom are in headerDynamicStyle
     },
