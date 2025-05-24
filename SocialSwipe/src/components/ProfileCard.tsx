@@ -5,7 +5,7 @@ import {
     Text,
     StyleSheet,
     ImageBackground,
-    Dimensions,
+    // Dimensions, // No longer directly used for screenWidth/Height here
     Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -17,8 +17,6 @@ import Reanimated, {
     withSequence,
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
-
-// const { width: screenWidth, height: screenHeight } = Dimensions.get('window'); // No longer needed for card dimensions
 
 export interface Profile {
     id: string;
@@ -78,6 +76,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
     useEffect(() => {
+        // Reset to the first image when the profile ID changes
         setCurrentImageIndex(0);
     }, [profile.id]);
 
@@ -124,6 +123,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const onSwipeLeft = useCallback((event: FlingGestureHandlerStateChangeEvent) => {
         if (event.nativeEvent.oldState === State.ACTIVE) {
+            // Check if there are multiple images before trying to navigate
             if (profile.profile_pictures && profile.profile_pictures.length > 1) {
                 goToNextImage();
             }
@@ -132,6 +132,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const onSwipeRight = useCallback((event: FlingGestureHandlerStateChangeEvent) => {
         if (event.nativeEvent.oldState === State.ACTIVE) {
+            // Check if there are multiple images before trying to navigate
             if (profile.profile_pictures && profile.profile_pictures.length > 1) {
                 goToPrevImage();
             }
@@ -145,11 +146,29 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const CardContents = () => (
         <>
+            {/* ADDED: Image Progress Indicator */}
+            {profile.profile_pictures && profile.profile_pictures.length > 1 && (
+                <View style={styles.imageProgressContainer}>
+                    {profile.profile_pictures.map((_, index) => (
+                        <View
+                            key={`img-progress-${profile.id}-${index}`} // Ensure unique key
+                            style={[
+                                styles.imageProgressSegment,
+                                index === currentImageIndex
+                                    ? styles.imageProgressSegmentActive
+                                    : styles.imageProgressSegmentInactive,
+                            ]}
+                        />
+                    ))}
+                </View>
+            )}
+
             <LinearGradient
                 colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.8)']}
-                style={styles.gradientOverlay} // Height adjusted in styles
+                style={styles.gradientOverlay}
             />
 
+            {/* This View handles taps for PREV/NEXT PROFILE, not image navigation */}
             <View style={styles.navTapZoneContainer}>
                 <TapGestureHandler
                     onHandlerStateChange={({ nativeEvent }) => {
@@ -178,7 +197,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                 <Icon name="heart" size={100} color="#FFFFFF" style={styles.heartIcon} />
             </Reanimated.View>
 
-            {/* MODIFIED: styles.infoContainer updated for spacing */}
             <View style={styles.infoContainer}> 
                 <Text style={styles.nameAgeText}>
                     {profile.first_name}, {age}
@@ -226,11 +244,11 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
             onHandlerStateChange={onDoubleTapEvent}
             numberOfTaps={2}
         >
-            <FlingGestureHandler
+            <FlingGestureHandler // Handles swipe right for PREVIOUS image
                 direction={Directions.RIGHT}
                 onHandlerStateChange={onSwipeRight}
             >
-                <FlingGestureHandler
+                <FlingGestureHandler // Handles swipe left for NEXT image
                     direction={Directions.LEFT}
                     onHandlerStateChange={onSwipeLeft}
                 >
@@ -267,7 +285,7 @@ const styles = StyleSheet.create({
         flex: 1,
         width: '100%', 
         height: '100%', 
-        justifyContent: 'flex-end', // Pushes CardContents (and thus infoContainer) to the bottom
+        justifyContent: 'flex-end',
     },
     fallbackBackground: {
         backgroundColor: '#001F3F', 
@@ -291,40 +309,60 @@ const styles = StyleSheet.create({
         bottom: 0,
         height: '60%', 
     },
-    navTapZoneContainer: {
+    // ADDED: Styles for image progress indicator
+    imageProgressContainer: {
+        position: 'absolute',
+        top: 15, // Distance from the top of the card
+        left: 15, // Distance from the left of the card
+        right: 15, // Distance from the right of the card
+        flexDirection: 'row',
+        height: 3, // Thickness of the progress bars
+        gap: 4,    // Spacing between segments
+        // zIndex not strictly needed here if rendered before other z-indexed items,
+        // but can be added if layering issues arise.
+        // zIndex: 0, // Visually on the image, behind interactive layers if they overlap
+    },
+    imageProgressSegment: {
+        flex: 1, // Each segment takes equal width
+        height: '100%',
+        borderRadius: 1.5, // Makes segments pill-shaped
+    },
+    imageProgressSegmentActive: {
+        backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    },
+    imageProgressSegmentInactive: {
+        backgroundColor: 'rgba(255, 255, 255, 0.4)',
+    },
+    navTapZoneContainer: { // For PREV/NEXT PROFILE taps
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
         flexDirection: 'row',
-        zIndex: 1,
+        zIndex: 1, // Above image progress, below info and heart
     },
     navTapArea: {
         flex: 1, 
         height: '100%',
     },
-    navTapCenterArea: {
+    navTapCenterArea: { // Center area might be used to differentiate taps or for other interactions
         flex: 1,
         height: '100%',
     },
     infoContainer: {
         backgroundColor: 'rgba(0, 12, 40, 0.7)',
-        padding: 16, // Internal padding for content
+        padding: 16,
         paddingBottom: Platform.OS === 'ios' ? 30 : 20, 
-        // MODIFIED: Added margins for spacing from card edges
         marginHorizontal: 12, 
         marginBottom: 12,
-        // MODIFIED: Apply borderRadius to all corners
-        borderRadius: 22, // Consistent rounded corners for the info container itself
-        // borderTopLeftRadius: 24, // Replaced by borderRadius
-        // borderTopRightRadius: 24, // Replaced by borderRadius
+        borderRadius: 22, 
         shadowColor: '#000000',
-        shadowOffset: { width: 0, height: -2 }, // Shadow still makes sense for a raised appearance
+        shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.3,
         shadowRadius: 10,
         elevation: 10,
-        zIndex: 2, 
+        zIndex: 2, // Above navTapZoneContainer
     },
     nameAgeText: {
         fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-bold',
@@ -392,7 +430,7 @@ const styles = StyleSheet.create({
         bottom: 0,
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 3, 
+        zIndex: 3, // Highest zIndex for visibility during animation
     },
     heartIcon: {
         textShadowColor: 'rgba(255, 92, 141, 0.75)',
