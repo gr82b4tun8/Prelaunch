@@ -178,7 +178,8 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                 <Icon name="heart" size={100} color="#FFFFFF" style={styles.heartIcon} />
             </Reanimated.View>
 
-            <View style={styles.infoContainer}> {/* marginHorizontal removed from styles */}
+            {/* MODIFIED: styles.infoContainer updated for spacing */}
+            <View style={styles.infoContainer}> 
                 <Text style={styles.nameAgeText}>
                     {profile.first_name}, {age}
                 </Text>
@@ -233,12 +234,11 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                     direction={Directions.LEFT}
                     onHandlerStateChange={onSwipeLeft}
                 >
-                    {/* This View now fills its parent container from ProfileBrowseScreen */}
                     <Reanimated.View style={styles.cardRootView} collapsable={false}>
                         {displayedImageUri ? (
                             <ImageBackground
                                 source={{ uri: displayedImageUri }}
-                                style={styles.backgroundImage} // width/height adjusted in styles
+                                style={styles.backgroundImage} 
                                 resizeMode="cover"
                                 onError={(error) => console.log("Image loading error: ", error.nativeEvent.error)}
                             >
@@ -260,14 +260,14 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 };
 
 const styles = StyleSheet.create({
-    cardRootView: { // Renamed from fullScreenView for clarity, behavior is to fill parent
+    cardRootView: { 
         flex: 1,
     },
     backgroundImage: { 
         flex: 1,
-        width: '100%', // MODIFIED: Fill parent width
-        height: '100%', // MODIFIED: Fill parent height
-        justifyContent: 'flex-end',
+        width: '100%', 
+        height: '100%', 
+        justifyContent: 'flex-end', // Pushes CardContents (and thus infoContainer) to the bottom
     },
     fallbackBackground: {
         backgroundColor: '#001F3F', 
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        height: '60%', // MODIFIED: Relative to card height
+        height: '60%', 
     },
     navTapZoneContainer: {
         position: 'absolute',
@@ -310,13 +310,17 @@ const styles = StyleSheet.create({
     },
     infoContainer: {
         backgroundColor: 'rgba(0, 12, 40, 0.7)',
-        padding: 16,
+        padding: 16, // Internal padding for content
         paddingBottom: Platform.OS === 'ios' ? 30 : 20, 
-        borderTopLeftRadius: 24,
-        borderTopRightRadius: 24,
-        // marginHorizontal: 20, // REMOVED
+        // MODIFIED: Added margins for spacing from card edges
+        marginHorizontal: 12, 
+        marginBottom: 12,
+        // MODIFIED: Apply borderRadius to all corners
+        borderRadius: 22, // Consistent rounded corners for the info container itself
+        // borderTopLeftRadius: 24, // Replaced by borderRadius
+        // borderTopRightRadius: 24, // Replaced by borderRadius
         shadowColor: '#000000',
-        shadowOffset: { width: 0, height: -2 },
+        shadowOffset: { width: 0, height: -2 }, // Shadow still makes sense for a raised appearance
         shadowOpacity: 0.3,
         shadowRadius: 10,
         elevation: 10,
