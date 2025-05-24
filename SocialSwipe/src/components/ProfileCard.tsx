@@ -7,10 +7,9 @@ import {
     ImageBackground,
     Dimensions,
     Platform,
-    // Pressable, // Removed as it was only used for arrow buttons
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { TapGestureHandler, State, FlingGestureHandler, Directions, FlingGestureHandlerStateChangeEvent } from 'react-native-gesture-handler'; // Added FlingGestureHandler, Directions, FlingGestureHandlerStateChangeEvent
+import { TapGestureHandler, State, FlingGestureHandler, Directions, FlingGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
 import Reanimated, {
     useSharedValue,
     useAnimatedStyle,
@@ -19,7 +18,7 @@ import Reanimated, {
 } from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/Ionicons';
 
-const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+// const { width: screenWidth, height: screenHeight } = Dimensions.get('window'); // No longer needed for card dimensions
 
 export interface Profile {
     id: string;
@@ -31,7 +30,7 @@ export interface Profile {
     interests?: string[] | null;
     location?: string | null;
     looking_for?: string | null;
-    profile_pictures: string[]; // Expect this to be an array of URLs
+    profile_pictures: string[];
     created_at: string;
     updated_at: string;
 }
@@ -123,7 +122,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
         }
     }, [profile.profile_pictures]);
 
-    // Swipe handlers for image navigation
     const onSwipeLeft = useCallback((event: FlingGestureHandlerStateChangeEvent) => {
         if (event.nativeEvent.oldState === State.ACTIVE) {
             if (profile.profile_pictures && profile.profile_pictures.length > 1) {
@@ -149,7 +147,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
         <>
             <LinearGradient
                 colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.1)', 'rgba(0,0,0,0.8)']}
-                style={styles.gradientOverlay}
+                style={styles.gradientOverlay} // Height adjusted in styles
             />
 
             <View style={styles.navTapZoneContainer}>
@@ -176,13 +174,11 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                 </TapGestureHandler>
             </View>
 
-            {/* Image Navigation Arrows REMOVED */}
-
             <Reanimated.View style={[styles.animatedHeartContainer, animatedHeartStyle]}>
                 <Icon name="heart" size={100} color="#FFFFFF" style={styles.heartIcon} />
             </Reanimated.View>
 
-            <View style={styles.infoContainer}>
+            <View style={styles.infoContainer}> {/* marginHorizontal removed from styles */}
                 <Text style={styles.nameAgeText}>
                     {profile.first_name}, {age}
                 </Text>
@@ -237,11 +233,12 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                     direction={Directions.LEFT}
                     onHandlerStateChange={onSwipeLeft}
                 >
-                    <Reanimated.View style={styles.fullScreenView} collapsable={false}>
+                    {/* This View now fills its parent container from ProfileBrowseScreen */}
+                    <Reanimated.View style={styles.cardRootView} collapsable={false}>
                         {displayedImageUri ? (
                             <ImageBackground
                                 source={{ uri: displayedImageUri }}
-                                style={styles.backgroundImage}
+                                style={styles.backgroundImage} // width/height adjusted in styles
                                 resizeMode="cover"
                                 onError={(error) => console.log("Image loading error: ", error.nativeEvent.error)}
                             >
@@ -263,13 +260,13 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 };
 
 const styles = StyleSheet.create({
-    fullScreenView: {
+    cardRootView: { // Renamed from fullScreenView for clarity, behavior is to fill parent
         flex: 1,
     },
     backgroundImage: { 
         flex: 1,
-        width: screenWidth,
-        height: screenHeight,
+        width: '100%', // MODIFIED: Fill parent width
+        height: '100%', // MODIFIED: Fill parent height
         justifyContent: 'flex-end',
     },
     fallbackBackground: {
@@ -292,7 +289,7 @@ const styles = StyleSheet.create({
         left: 0,
         right: 0,
         bottom: 0,
-        height: screenHeight * 0.5,
+        height: '60%', // MODIFIED: Relative to card height
     },
     navTapZoneContainer: {
         position: 'absolute',
@@ -311,15 +308,13 @@ const styles = StyleSheet.create({
         flex: 1,
         height: '100%',
     },
-    // Styles for image navigation arrows - REMOVED
-    // imageNavigationContainer, imageNavButtonWrapper, imageNavButton, imageNavButtonLeft, imageNavButtonRight, navIconShadow
     infoContainer: {
         backgroundColor: 'rgba(0, 12, 40, 0.7)',
         padding: 16,
         paddingBottom: Platform.OS === 'ios' ? 30 : 20, 
         borderTopLeftRadius: 24,
         borderTopRightRadius: 24,
-        marginHorizontal: 20,
+        // marginHorizontal: 20, // REMOVED
         shadowColor: '#000000',
         shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.3,

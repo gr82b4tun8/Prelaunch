@@ -233,7 +233,7 @@ export default function ProfileBrowseScreen() {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
-                    <Text style={styles.infoText}>Redirecting to Welcome Screen...</Text>
+                    <Text style={styles.infoTextRedirecting}>Redirecting to Welcome Screen...</Text>
                     <ActivityIndicator size="small" color="#FF6347" />
                 </View>
             </SafeAreaView>
@@ -276,7 +276,6 @@ export default function ProfileBrowseScreen() {
                     <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
                         <Text style={styles.headerButtonText}>Edit Profile</Text>
                     </Pressable>
-                    {/* MODIFIED: Changed Logout to Notifications button */}
                     <Pressable onPress={handleNavigateToNotifications} style={[styles.headerButton, styles.headerButtonRight]}>
                         <Text style={styles.headerButtonText}>Notifications</Text>
                     </Pressable>
@@ -284,8 +283,6 @@ export default function ProfileBrowseScreen() {
                 <View style={styles.centeredMessageContainerOnGradient}>
                     <Text style={styles.infoText}>No other profiles found yet. Check back soon!</Text>
                     <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
-                    {/* Optional: Add back a logout button elsewhere if needed, e.g., in Edit Profile or a dedicated settings menu */}
-                    {/* <Pressable onPress={handleLogout} style={[styles.button, {marginTop: 20}]}><Text style={styles.buttonText}>Logout</Text></Pressable> */}
                 </View>
             </LinearGradient>
         );
@@ -305,7 +302,6 @@ export default function ProfileBrowseScreen() {
                     <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
                         <Text style={styles.headerButtonText}>Edit Profile</Text>
                     </Pressable>
-                    {/* MODIFIED: Changed Logout to Notifications button */}
                     <Pressable onPress={handleNavigateToNotifications} style={[styles.headerButton, styles.headerButtonRight]}>
                         <Text style={styles.headerButtonText}>Notifications</Text>
                     </Pressable>
@@ -329,21 +325,23 @@ export default function ProfileBrowseScreen() {
                 <Pressable onPress={handleEditProfile} style={[styles.headerButton, styles.headerButtonLeft]}>
                     <Text style={styles.headerButtonText}>Edit Profile</Text>
                 </Pressable>
-                {/* MODIFIED: Changed Logout to Notifications button */}
                 <Pressable onPress={handleNavigateToNotifications} style={[styles.headerButton, styles.headerButtonRight]}>
                     <Text style={styles.headerButtonText}>Notifications</Text>
                 </Pressable>
             </View>
 
-            {currentProfile && (
-                <ProfileCard
-                    profile={currentProfile}
-                    onLike={handleLikeProfile}
-                    isVisible={true}
-                    onRequestNextProfile={goToNextProfile}
-                    onRequestPrevProfile={goToPrevProfile}
-                />
-            )}
+            {/* MODIFIED: Added a container View for the ProfileCard */}
+            <View style={styles.profileCardContainer}>
+                {currentProfile && (
+                    <ProfileCard
+                        profile={currentProfile}
+                        onLike={handleLikeProfile}
+                        isVisible={true}
+                        onRequestNextProfile={goToNextProfile}
+                        onRequestPrevProfile={goToPrevProfile}
+                    />
+                )}
+            </View>
 
             {profiles.length > 0 && currentProfile && (
                 <SafeAreaView style={styles.progressSafeArea}>
@@ -375,7 +373,7 @@ const styles = StyleSheet.create({
         paddingHorizontal: 15,
         paddingVertical: -26, // This seems unusual, typically padding is positive
         minHeight: 100,
-        zIndex: 20,
+        zIndex: 20, // Ensure header is above profileCardContainer shadow if they overlap
     },
     headerButton: {
         paddingVertical: 8,
@@ -392,6 +390,24 @@ const styles = StyleSheet.create({
         textShadowColor: 'rgba(0, 0, 0, 0.2)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 1,
+    },
+    // ADDED: Container for the ProfileCard
+    profileCardContainer: {
+        flex: 1, // Allows the card to take up available vertical space
+        marginHorizontal: 20, // Horizontal spacing from screen edges
+        marginTop: 15,        // Space below header/progress bars area
+        marginBottom: 25,     // Space from bottom of screen
+        borderRadius: 20,     // Rounded corners
+        overflow: 'hidden',   // Clips ProfileCard content to rounded corners
+        // Adding a subtle shadow for depth (optional, adjust as needed)
+        shadowColor: "#000",
+        shadowOffset: {
+            width: 0,
+            height: 2,
+        },
+        shadowOpacity: 0.15,
+        shadowRadius: 3.84,
+        elevation: 5, // For Android shadow
     },
     safeAreaSolidBackground: {
         flex: 1,
@@ -413,7 +429,7 @@ const styles = StyleSheet.create({
     loadingText: {
         marginTop: 10,
         fontSize: 16,
-        color: '#f0f0f0', // Ensure contrast with safeAreaSolidBackground
+        color: '#f0f0f0', 
     },
     errorText: {
         color: '#FF6347',
@@ -421,15 +437,22 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginBottom: 20,
     },
-    infoText: {
+    infoText: { // For messages on gradient background
         textAlign: 'center',
         fontSize: 16,
-        color: 'white', // For gradient background
+        color: 'white', 
         paddingHorizontal: 20,
         marginBottom: 20,
         textShadowColor: 'rgba(0, 0, 0, 0.3)',
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 2,
+    },
+    infoTextRedirecting: { // For messages on solid background (like redirecting)
+        textAlign: 'center',
+        fontSize: 16,
+        color: '#f0f0f0', // Ensure contrast with safeAreaSolidBackground
+        paddingHorizontal: 20,
+        marginBottom: 10,
     },
     button: {
         marginTop: 10,
@@ -450,17 +473,18 @@ const styles = StyleSheet.create({
     },
     progressSafeArea: {
         position: 'absolute',
-        top: 0, 
+        top: 0,
         left: 0,
         right: 0,
-        zIndex: 10, 
+        zIndex: 10, // Ensures progress bars are visible above other content if needed, but below header
     },
     progressBarsContainer: {
         flexDirection: 'row',
         height: 4,
         marginHorizontal: 10,
         gap: 4,
-        marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35, 
+        // marginTop calculation remains, positions bars near top of screen
+        marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35,
     },
     progressBarSegment: {
         flex: 1,
