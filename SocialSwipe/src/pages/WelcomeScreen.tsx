@@ -3,7 +3,7 @@ import {
   View,
   Text,
   ScrollView,
-  Image, // Uncommented: Image component is needed for navImage
+  Image, // Image component is needed
   TouchableOpacity,
   StyleSheet,
   Dimensions,
@@ -16,6 +16,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 // Adjust the import path as per your project structure.
 import type { RootStackParamList } from '../types/navigation'; // ** IMPORTANT: Adjust this import path **
 import navImage from '../assets/nav.png'; // Assuming this path is correct relative to this file
+import logoImage from '../assets/logo.png'; // ** ADDED: Import for the logo image **
 
 // Get screen dimensions
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -40,7 +41,7 @@ interface PlaceholderSlide extends BaseSlide {
 }
 
 interface ImageSlide extends BaseSlide {
-  image: any; // In React Native, this is typically ImageSourcePropType, using 'any' for simplicity from your example
+  image: any; // In React Native, this is typically ImageSourcePropType, using 'any' for simplicity
   width: number; // Width for the actual image
   height: number; // Height for the actual image
   imagePlaceholder?: undefined; // Explicitly state that imagePlaceholder is not on this type
@@ -94,8 +95,8 @@ const slides: WelcomeSlideType[] = [
     description:
       `Once you're at the venue, confirm your arrival to activate 'IRL Mode' on ${APP_NAME}. Focus on real-world interactions, knowing who's open to connecting right there, right now. (Location sharing is always your choice!)`,
     image: navImage, // Use the imported image
-    width: SCREEN_WIDTH * 2, // Width for the actual image
-    height: SCREEN_HEIGHT * .55, // Height for the actual image
+    width: SCREEN_WIDTH * 2, // ** REVERTED: Width for the actual image **
+    height: SCREEN_HEIGHT * .55, // ** REVERTED: Height for the actual image **
   },
   {
     key: '5',
@@ -109,17 +110,14 @@ const slides: WelcomeSlideType[] = [
       backgroundColor: '#E6E6FA', // Lavender
     },
   },
-  {
+  { // ** MODIFIED: This slide now uses the logo image **
     key: '6',
     title: 'Ready for Real Connections?',
     description:
       `Stop the endless chat cycles that go nowhere. ${APP_NAME} is built for genuine, real-world interactions. Create your prelaunch profile today and be the first to experience the future of social connection!`,
-    imagePlaceholder: {
-      text: `${APP_NAME} Logo`,
-      width: SCREEN_WIDTH * 0.5,
-      height: SCREEN_HEIGHT * 0.2,
-      backgroundColor: '#F0E68C', // Khaki
-    },
+    image: logoImage, // Use the imported logo image
+    width: SCREEN_WIDTH * 0.5, // Width for the logo image (taken from previous placeholder)
+    height: SCREEN_HEIGHT * 0.2, // Height for the logo image (taken from previous placeholder)
   },
 ];
 
@@ -203,7 +201,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
                     <Text style={styles.placeholderText}>{slide.imagePlaceholder.text}</Text>
                   </View>
                 ) : slide.image ? (
-                  // MODIFIED SECTION FOR ACTUAL IMAGE RENDERING
+                  // SECTION FOR ACTUAL IMAGE RENDERING
                   <View style={[
                     styles.roundedImageWrapper, // Apply wrapper style for rounding and overflow
                     {
@@ -214,7 +212,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
                     <Image
                       source={slide.image}
                       style={styles.actualImage} // Image fills the rounded wrapper
-                      resizeMode="contain"
+                      resizeMode="contain" // Changed to contain to ensure logo/image visibility
                     />
                   </View>
                 ) : null}
@@ -289,13 +287,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 120,
+    paddingBottom: 120, // Space for bottom controls
   },
   imageContainer: {
     width: '100%',
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 20,
+    minHeight: SCREEN_HEIGHT * 0.25, // Adjust as needed, helps prevent text overlap
   },
   placeholderImage: {
     justifyContent: 'center',
@@ -311,16 +310,17 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     padding: 10,
   },
-  // NEW: Style for the View that will wrap the actual image
   roundedImageWrapper: {
-    borderRadius: 15,      // Apply the desired border radius here
-    overflow: 'hidden',    // Crucial for clipping the Image content
+    borderRadius: 15,
+    overflow: 'hidden',
     // width and height will be applied dynamically inline to this wrapper
+    // ** REMOVED BORDER STYLES THAT CAUSED THE FAINT BOXES **
+    // borderWidth: 1, // Removed
+    // borderColor: 'rgba(255, 255, 255, 0.2)', // Removed
   },
-  // MODIFIED: Style for the Image component when it's inside the wrapper
   actualImage: {
-    width: '100%',         // Make the image fill the wrapper
-    height: '100%',        // Make the image fill the wrapper
+    width: '100%',
+    height: '100%',
     // resizeMode is applied directly on the Image component
   },
   textContainer: {
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 20,
-    borderRadius: 25, // <<< THIS LINE WAS ADDED
+    borderRadius: 25,
   },
   buttonText: {
     color: '#FFFFFF',
