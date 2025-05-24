@@ -116,8 +116,8 @@ const slides: WelcomeSlideType[] = [
     description:
       `Stop the endless chat cycles that go nowhere. ${APP_NAME} is built for genuine, real-world interactions. Create your prelaunch profile today and be the first to experience the future of social connection!`,
     image: logoImage, // Use the imported logo image
-    width: SCREEN_WIDTH * 0.5, // Width for the logo image (taken from previous placeholder)
-    height: SCREEN_HEIGHT * 0.2, // Height for the logo image (taken from previous placeholder)
+    width: SCREEN_WIDTH * 1, // Width for the logo image (taken from previous placeholder)
+    height: SCREEN_HEIGHT * 0.3, // Height for the logo image (taken from previous placeholder)
   },
 ];
 
