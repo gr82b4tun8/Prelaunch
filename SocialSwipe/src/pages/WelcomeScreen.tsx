@@ -94,8 +94,8 @@ const slides: WelcomeSlideType[] = [
     description:
       `Once you're at the venue, confirm your arrival to activate 'IRL Mode' on ${APP_NAME}. Focus on real-world interactions, knowing who's open to connecting right there, right now. (Location sharing is always your choice!)`,
     image: navImage, // Use the imported image
-    width: SCREEN_WIDTH * 0.8, // Width for the actual image
-    height: SCREEN_HEIGHT * 0.3, // Height for the actual image
+    width: SCREEN_WIDTH * 2, // Width for the actual image
+    height: SCREEN_HEIGHT * .55, // Height for the actual image
   },
   {
     key: '5',
@@ -133,8 +133,7 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
   const scrollViewRef = useRef<ScrollView>(null);
 
   const onScroll = (event: any) => {
-    // Using SCREEN_WIDTH for slideSize as slides are screen-width
-    const slideSize = SCREEN_WIDTH; 
+    const slideSize = SCREEN_WIDTH;
     const contentOffset = event.nativeEvent.contentOffset.x;
     const newIndex = Math.round(contentOffset / slideSize);
     if (newIndex !== currentIndex) {
@@ -183,14 +182,14 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
           pagingEnabled
           showsHorizontalScrollIndicator={false}
           onScroll={onScroll}
-          scrollEventThrottle={16} // Standard value for smooth scroll tracking
+          scrollEventThrottle={16}
           style={styles.scrollView}
           contentContainerStyle={styles.scrollViewContent}
         >
-          {slides.map((slide: WelcomeSlideType) => ( // Added type annotation for slide
+          {slides.map((slide: WelcomeSlideType) => (
             <View key={slide.key} style={styles.slide}>
               <View style={styles.imageContainer}>
-                {slide.imagePlaceholder ? ( // Check if it's a PlaceholderSlide
+                {slide.imagePlaceholder ? (
                   <View
                     style={[
                       styles.placeholderImage,
@@ -203,16 +202,21 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
                   >
                     <Text style={styles.placeholderText}>{slide.imagePlaceholder.text}</Text>
                   </View>
-                ) : slide.image ? ( // Check if it's an ImageSlide
-                  <Image
-                    source={slide.image}
-                    style={{
-                      width: slide.width,
-                      height: slide.height,
-                      borderRadius: 15, // Added borderRadius for consistency with placeholder
-                    }}
-                    resizeMode="contain" // Or "cover", "stretch", etc. as needed
-                  />
+                ) : slide.image ? (
+                  // MODIFIED SECTION FOR ACTUAL IMAGE RENDERING
+                  <View style={[
+                    styles.roundedImageWrapper, // Apply wrapper style for rounding and overflow
+                    {
+                      width: slide.width,     // Dynamic width for the wrapper
+                      height: slide.height,   // Dynamic height for the wrapper
+                    }
+                  ]}>
+                    <Image
+                      source={slide.image}
+                      style={styles.actualImage} // Image fills the rounded wrapper
+                      resizeMode="contain"
+                    />
+                  </View>
                 ) : null}
               </View>
               <View style={styles.textContainer}>
@@ -271,28 +275,26 @@ const styles = StyleSheet.create({
   },
   safeArea: {
     flex: 1,
-    backgroundColor: 'transparent', // Ensure SafeAreaView doesn't obscure the gradient
+    backgroundColor: 'transparent',
     paddingTop: Platform.OS === 'android' ? StatusBar.currentHeight : 0,
   },
   scrollView: {
     flex: 1,
   },
   scrollViewContent: {
-    // No specific changes needed here, but ensure it allows full height content if necessary
+    // No specific changes needed here
   },
   slide: {
     width: SCREEN_WIDTH,
-    // height: '100%', // Removed to let content define height, useful if imageContainer + textContainer have defined heights or flex
     alignItems: 'center',
-    justifyContent: 'center', // Vertically center content in the slide
+    justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingBottom: 120, // Space for bottomControls
+    paddingBottom: 120,
   },
   imageContainer: {
-    width: '100%', // Ensure it takes available width
-    alignItems: 'center', // Center the image/placeholder horizontally
-    justifyContent: 'center', // Center vertically if it has fixed height
-    // maxHeight: SCREEN_HEIGHT * 0.35, // This can be useful, or controlled by individual image/placeholder heights
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 20,
   },
   placeholderImage: {
@@ -301,52 +303,60 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     borderWidth: 1,
     borderColor: '#DDDDDD',
-    // width and height will be applied from slide data
   },
   placeholderText: {
     fontSize: 16,
-    color: '#FFFFF0', // Ivory, for better contrast on various placeholder backgrounds
+    color: '#FFFFF0',
     fontWeight: 'bold',
     textAlign: 'center',
     padding: 10,
   },
-  // actualImage: { // If you need specific styles for the Image component not covered by inline style
-  //   borderRadius: 15,
-  // },
+  // NEW: Style for the View that will wrap the actual image
+  roundedImageWrapper: {
+    borderRadius: 15,      // Apply the desired border radius here
+    overflow: 'hidden',    // Crucial for clipping the Image content
+    // width and height will be applied dynamically inline to this wrapper
+  },
+  // MODIFIED: Style for the Image component when it's inside the wrapper
+  actualImage: {
+    width: '100%',         // Make the image fill the wrapper
+    height: '100%',        // Make the image fill the wrapper
+    // resizeMode is applied directly on the Image component
+  },
   textContainer: {
-    width: '100%', // Take full width for text alignment
-    alignItems: 'center', // Center title and description
-    paddingHorizontal: 10, // Padding within the text block
+    width: '100%',
+    alignItems: 'center',
+    paddingHorizontal: 10,
   },
   title: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#FFFFF0', // Ivory
+    color: '#FFFFF0',
     textAlign: 'center',
     marginBottom: 12,
   },
   description: {
     fontSize: 16,
-    color: '#FFFFF0', // Ivory
+    color: '#FFFFF0',
     textAlign: 'center',
     lineHeight: 22,
-    paddingHorizontal: 10, // Further padding if lines are long
+    paddingHorizontal: 10,
   },
   bottomControls: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    height: 120, // Fixed height for the control area
-    justifyContent: 'center', // Primary axis (vertical)
-    alignItems: 'center', // Secondary axis (horizontal) for pagination
-    paddingBottom: Platform.OS === 'ios' ? 30 : 20, // Safe area padding for bottom
-    backgroundColor: 'transparent', // Let gradient show through
+    height: 120,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+    backgroundColor: 'transparent',
   },
   pagination: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20, // Space between dots and button
+    marginBottom: 20,
   },
   dot: {
     width: 10,
@@ -360,25 +370,25 @@ const styles = StyleSheet.create({
   dotInactive: {
     backgroundColor: 'rgba(255, 255, 255, 0.5)',
   },
-  button: { // TouchableOpacity
+  button: {
     borderRadius: 25,
     minWidth: SCREEN_WIDTH * 0.7,
-    maxWidth: SCREEN_WIDTH * 0.9, // Max width for very long text button
+    maxWidth: SCREEN_WIDTH * 0.9,
     height: 50,
-    overflow: 'hidden', // Essential for border radius on gradient
+    overflow: 'hidden',
     alignItems: 'center',
     justifyContent: 'center',
   },
   signUpButton: {
-    minWidth: SCREEN_WIDTH * 0.85, // Slightly wider for longer text
+    minWidth: SCREEN_WIDTH * 0.85,
   },
-  buttonGradientWrapper: { // LinearGradient
+  buttonGradientWrapper: {
     width: '100%',
     height: '100%',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 20, // Padding inside the gradient for the text
-     // borderRadius: 25, // Already on parent, but good for redundancy if parent doesn't clip
+    paddingHorizontal: 20,
+    borderRadius: 25, // <<< THIS LINE WAS ADDED
   },
   buttonText: {
     color: '#FFFFFF',
