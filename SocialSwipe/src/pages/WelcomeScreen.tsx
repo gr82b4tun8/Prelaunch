@@ -17,6 +17,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import type { RootStackParamList } from '../types/navigation'; // ** IMPORTANT: Adjust this import path **
 import navImage from '../assets/nav.png'; // Assuming this path is correct relative to this file
 import logoImage from '../assets/logo.png'; // ** ADDED: Import for the logo image **
+import eventSceneImage from '../assets/eventScene.png'; // ** ADDED: Import for the event scene image **
+import locationRequestImage from '../assets/locationrequest.png'; // ** ADDED: Import for the location request image **
 
 // Get screen dimensions
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -53,17 +55,14 @@ type WelcomeSlideType = PlaceholderSlide | ImageSlide;
 const APP_NAME = "Sphere"; // You can change this
 
 const slides: WelcomeSlideType[] = [
-  {
+  { // ** MODIFIED: This slide now uses the eventSceneImage **
     key: '1',
     title: `Welcome to ${APP_NAME}!`,
     description:
       "Tired of endless swiping? Discover genuine connections with people heading to the same events, bars, and venues as you!",
-    imagePlaceholder: {
-      text: 'Vibrant Event Scene',
-      width: SCREEN_WIDTH * 0.8,
-      height: SCREEN_HEIGHT * 0.3,
-      backgroundColor: '#FFDAB9', // Light Peach
-    },
+    image: eventSceneImage, // Use the imported event scene image
+    width: SCREEN_WIDTH * 0.87, // Width for the event scene image
+    height: SCREEN_HEIGHT * 0.4, // Height for the event scene image
   },
   {
     key: '2',
@@ -95,20 +94,17 @@ const slides: WelcomeSlideType[] = [
     description:
       `Once you're at the venue, confirm your arrival to activate 'IRL Mode' on ${APP_NAME}. Focus on real-world interactions, knowing who's open to connecting right there, right now. (Location sharing is always your choice!)`,
     image: navImage, // Use the imported image
-    width: SCREEN_WIDTH * 2, // ** REVERTED: Width for the actual image **
-    height: SCREEN_HEIGHT * .55, // ** REVERTED: Height for the actual image **
+    width: SCREEN_WIDTH * 0.8, // ** REVERTED: Width for the actual image **
+    height: SCREEN_HEIGHT * .551, // ** REVERTED: Height for the actual image **
   },
-  {
+  { // ** MODIFIED: This slide now uses the locationRequestImage **
     key: '5',
     title: 'Meet Smarter, Meet Safer',
     description:
       `Connect with confidence. ${APP_NAME} champions meeting in public spaces, making those first encounters more comfortable and secure than typical one-on-one dates. Say goodbye to sketchy DMs!`,
-    imagePlaceholder: {
-      text: 'Safe Public Meeting',
-      width: SCREEN_WIDTH * 0.8,
-      height: SCREEN_HEIGHT * 0.3,
-      backgroundColor: '#E6E6FA', // Lavender
-    },
+    image: locationRequestImage, // Use the imported location request image
+    width: SCREEN_WIDTH * 0.8, // Width for the location request image
+    height: SCREEN_HEIGHT * 0.551, // Height for the location request image
   },
   { // ** MODIFIED: This slide now uses the logo image **
     key: '6',
