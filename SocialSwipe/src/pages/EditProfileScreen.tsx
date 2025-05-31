@@ -527,7 +527,7 @@ const EditProfileScreen: React.FC = () => {
                                 onPress={pickImage}
                                 disabled={isSubmitting || allImageUris.length >= MAX_PROFILE_PHOTOS}
                             >
-                                <Ionicons name="images-outline" size={18} color="#FF6347" style={{ marginRight: 8 }}/>
+                                <Ionicons name="images-outline" size={18} color="#FE9494" style={{ marginRight: 8 }}/>
                                 <Text style={styles.outlineButtonText}>Select New Images</Text>
                             </Pressable>
                             {allImageUris.length === 0 && form.formState.isSubmitted && <Text style={styles.errorText}>Please add at least one photo.</Text>}
@@ -687,12 +687,12 @@ const styles = StyleSheet.create({
     interestInput: { flex: 1 /* Styles inherited from .input */ },
     addButton: { // This button style is quite distinct, should work on gradient
         paddingHorizontal: 16, height: 44, justifyContent: 'center',
-        backgroundColor: '#FF6347', // Primary action color
+        backgroundColor: '#FE9494', // Primary action color
         borderRadius: 6
     },
     badgeContainer: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 10, gap: 8 },
     badge: { // Badge style should work well
-        flexDirection: 'row', alignItems: 'center', backgroundColor: '#FF6347',
+        flexDirection: 'row', alignItems: 'center', backgroundColor: '#FE9494',
         borderRadius: 15, paddingVertical: 5, paddingLeft: 10, paddingRight: 4,
     },
     badgeText: { color: '#fff', fontSize: 14, marginRight: 4 },
@@ -712,10 +712,10 @@ const styles = StyleSheet.create({
     buttonContainer: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 24, paddingTop: 16, borderTopWidth: 1, borderTopColor: 'rgba(255,255,255,0.2)', gap: 16 }, // MODIFIED borderTopColor
     button: { paddingVertical: 12, paddingHorizontal: 20, borderRadius: 8, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', minWidth: 100, flex: 1 },
     buttonText: { color: '#fff', fontSize: 16, fontWeight: 'bold', textAlign: 'center' },
-    submitButton: { backgroundColor: '#FF6347', }, // Main action button
+    submitButton: { backgroundColor: '#FE9494', }, // Main action button
     outlineButton: { // For "Select New Images" and "Cancel"
         borderWidth: 1,
-        borderColor: '#FF6347', // Original orange for image selection
+        borderColor: '#FF9494', // Original orange for image selection
         backgroundColor: 'rgba(255,255,255,0.1)', // MODIFIED for gradient
     },
     outlineButtonText: { // For "Select New Images"
