@@ -39,6 +39,7 @@ interface ProfileCardProps {
     onRequestNextProfile: () => void;
     onRequestPrevProfile: () => void;
     isVisible: boolean;
+    isLiked: boolean;
 }
 
 const calculateAge = (dateOfBirth: string): number => {
@@ -70,6 +71,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     onRequestNextProfile,
     onRequestPrevProfile,
     isVisible,
+    isLiked,
 }) => {
     const age = useMemo(() => calculateAge(profile.date_of_birth), [profile.date_of_birth]);
     
@@ -106,7 +108,7 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const onDoubleTapEvent = useCallback((event: any) => {
         if (event.nativeEvent.state === State.ACTIVE) {
-            onLike(profile.id);
+            onLike(profile.id); // This function call should trigger an update in the parent's state, which then updates the `isLiked` prop for this card.
             triggerLikeAnimation();
         }
     }, [profile.id, onLike, triggerLikeAnimation]);
@@ -123,7 +125,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const onSwipeLeft = useCallback((event: FlingGestureHandlerStateChangeEvent) => {
         if (event.nativeEvent.oldState === State.ACTIVE) {
-            // Check if there are multiple images before trying to navigate
             if (profile.profile_pictures && profile.profile_pictures.length > 1) {
                 goToNextImage();
             }
@@ -132,7 +133,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const onSwipeRight = useCallback((event: FlingGestureHandlerStateChangeEvent) => {
         if (event.nativeEvent.oldState === State.ACTIVE) {
-            // Check if there are multiple images before trying to navigate
             if (profile.profile_pictures && profile.profile_pictures.length > 1) {
                 goToPrevImage();
             }
@@ -146,12 +146,12 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const CardContents = () => (
         <>
-            {/* ADDED: Image Progress Indicator */}
+            {/* Image Progress Indicator */}
             {profile.profile_pictures && profile.profile_pictures.length > 1 && (
                 <View style={styles.imageProgressContainer}>
                     {profile.profile_pictures.map((_, index) => (
                         <View
-                            key={`img-progress-${profile.id}-${index}`} // Ensure unique key
+                            key={`img-progress-${profile.id}-${index}`}
                             style={[
                                 styles.imageProgressSegment,
                                 index === currentImageIndex
@@ -168,7 +168,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                 style={styles.gradientOverlay}
             />
 
-            {/* This View handles taps for PREV/NEXT PROFILE, not image navigation */}
             <View style={styles.navTapZoneContainer}>
                 <TapGestureHandler
                     onHandlerStateChange={({ nativeEvent }) => {
@@ -234,6 +233,15 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                         <Text style={styles.lookingForText}>{profile.looking_for}</Text>
                     </View>
                 )}
+
+                {/* Static Heart Icon for Like Status */}
+                <View style={styles.staticHeartIconContainer}>
+                    <Icon
+                        name={isLiked ? "heart" : "heart-outline"}
+                        size={32} // UPDATED: Increased icon size
+                        color={isLiked ? "#FF5C8D" : "#FFFFFF"} 
+                    />
+                </View>
             </View>
         </>
     );
@@ -244,11 +252,11 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
             onHandlerStateChange={onDoubleTapEvent}
             numberOfTaps={2}
         >
-            <FlingGestureHandler // Handles swipe right for PREVIOUS image
+            <FlingGestureHandler
                 direction={Directions.RIGHT}
                 onHandlerStateChange={onSwipeRight}
             >
-                <FlingGestureHandler // Handles swipe left for NEXT image
+                <FlingGestureHandler 
                     direction={Directions.LEFT}
                     onHandlerStateChange={onSwipeLeft}
                 >
@@ -309,23 +317,21 @@ const styles = StyleSheet.create({
         bottom: 0,
         height: '60%', 
     },
-    // ADDED: Styles for image progress indicator
     imageProgressContainer: {
         position: 'absolute',
-        top: 15, // Distance from the top of the card
-        left: 15, // Distance from the left of the card
-        right: 15, // Distance from the right of the card
+        top: 15,
+        left: 15,
+        right: 15,
         flexDirection: 'row',
-        height: 3, // Thickness of the progress bars
-        gap: 4,    // Spacing between segments
-        // zIndex not strictly needed here if rendered before other z-indexed items,
-        // but can be added if layering issues arise.
-        // zIndex: 0, // Visually on the image, behind interactive layers if they overlap
+        height: 8, 
+        gap: 5,    
+        justifyContent: 'center', 
+        alignItems: 'center',     
     },
-    imageProgressSegment: {
-        flex: 1, // Each segment takes equal width
-        height: '100%',
-        borderRadius: 1.5, // Makes segments pill-shaped
+    imageProgressSegment: { 
+        width: 8,  
+        height: 8, 
+        borderRadius: 4, 
     },
     imageProgressSegmentActive: {
         backgroundColor: 'rgba(255, 255, 255, 0.9)',
@@ -333,20 +339,20 @@ const styles = StyleSheet.create({
     imageProgressSegmentInactive: {
         backgroundColor: 'rgba(255, 255, 255, 0.4)',
     },
-    navTapZoneContainer: { // For PREV/NEXT PROFILE taps
+    navTapZoneContainer: { 
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
         flexDirection: 'row',
-        zIndex: 1, // Above image progress, below info and heart
+        zIndex: 1, 
     },
     navTapArea: {
         flex: 1, 
         height: '100%',
     },
-    navTapCenterArea: { // Center area might be used to differentiate taps or for other interactions
+    navTapCenterArea: { 
         flex: 1,
         height: '100%',
     },
@@ -362,7 +368,7 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.3,
         shadowRadius: 10,
         elevation: 10,
-        zIndex: 2, // Above navTapZoneContainer
+        zIndex: 2, 
     },
     nameAgeText: {
         fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif-bold',
@@ -430,12 +436,17 @@ const styles = StyleSheet.create({
         bottom: 0,
         justifyContent: 'center',
         alignItems: 'center',
-        zIndex: 3, // Highest zIndex for visibility during animation
+        zIndex: 3, 
     },
     heartIcon: {
         textShadowColor: 'rgba(255, 92, 141, 0.75)',
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 6,
+    },
+    staticHeartIconContainer: {
+        position: 'absolute',
+        bottom: Platform.OS === 'ios' ? 30 : 20, 
+        right: 16, 
     },
 });
 

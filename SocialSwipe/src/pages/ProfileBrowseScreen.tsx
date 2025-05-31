@@ -20,13 +20,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import ProfileCard, { Profile } from '../components/ProfileCard';
 
-// It's good practice for this RootStackParamList to match the one in App.tsx if it refers to the same navigator.
 type ProfileBrowseScreenStackParamList = {
     ProfileBrowseScreen: undefined;
     EditProfileScreen: undefined;
-    WelcomeScreen: undefined; // Ensure WelcomeScreen is a route in your main navigator accessible from here
-    NotificationsScreen: undefined; // <-- ADDED: For navigating to notifications
-    // Add other screens if this screen can navigate to them
+    WelcomeScreen: undefined;
+    NotificationsScreen: undefined;
 };
 
 type ProfileBrowseScreenNavigationProp = StackNavigationProp<ProfileBrowseScreenStackParamList, 'ProfileBrowseScreen'>;
@@ -57,6 +55,8 @@ export default function ProfileBrowseScreen() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // ADDED: State to store IDs of liked profiles
+    const [likedProfileIds, setLikedProfileIds] = useState<Set<string>>(new Set());
 
     const handleLogout = async () => {
         Alert.alert(
@@ -95,7 +95,6 @@ export default function ProfileBrowseScreen() {
         }
     };
 
-    // NEW: Handler to navigate to NotificationsScreen
     const handleNavigateToNotifications = () => {
         navigation.navigate('NotificationsScreen');
     };
@@ -169,18 +168,42 @@ export default function ProfileBrowseScreen() {
         }
     }, [user, getPublicImageUrl]);
 
+    // ADDED: Function to fetch liked profile IDs for the current user
+    const fetchLikedProfiles = useCallback(async () => {
+        if (!user) return;
+        try {
+            const { data, error: fetchLikesError } = await supabase
+                .from('likes')
+                .select('liked_user_id')
+                .eq('liker_user_id', user.id);
+
+            if (fetchLikesError) throw fetchLikesError;
+
+            if (data) {
+                setLikedProfileIds(new Set(data.map(like => like.liked_user_id)));
+            }
+        } catch (err: any) {
+            console.error("Error fetching liked profiles:", err.message);
+            // Not setting general error/loading for this, as it's a background update
+        }
+    }, [user]);
+
+
     useEffect(() => {
         if (!isLoadingSupabase) {
             if (user) {
                 fetchProfiles();
+                fetchLikedProfiles(); // ADDED: Fetch liked profiles when user is available
             } else {
+                // Clear data on logout
                 setProfiles([]);
                 setCurrentIndex(0);
                 setError(null);
                 setLoading(false);
+                setLikedProfileIds(new Set()); // ADDED: Clear liked profiles
             }
         }
-    }, [user, isLoadingSupabase, fetchProfiles]);
+    }, [user, isLoadingSupabase, fetchProfiles, fetchLikedProfiles]); // ADDED: fetchLikedProfiles to dependency array
 
     const goToNextProfile = useCallback(() => setCurrentIndex(prev => Math.min(prev + 1, profiles.length - 1)), [profiles.length]);
     const goToPrevProfile = useCallback(() => setCurrentIndex(prev => Math.max(prev - 1, 0)), []);
@@ -192,24 +215,44 @@ export default function ProfileBrowseScreen() {
         }
         try {
             const likerUserId = user.id;
+
+            // Optional: Check if already liked locally to prevent redundant DB call if UI is primary driver
+            if (likedProfileIds.has(likedProfileId)) {
+                Alert.alert("Already Liked", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'This profile'} is already in your liked list.`);
+                return;
+            }
+
             const likeData = { liker_user_id: likerUserId, liked_user_id: likedProfileId };
             const { error: insertError } = await supabase.from('likes').insert([likeData]);
 
             if (insertError) {
-                if (insertError.code === '23505') { // Unique violation
+                if (insertError.code === '23505') { // Unique violation (already liked in DB)
                     Alert.alert("Already Liked", `You've already liked ${profiles.find(p => p.id === likedProfileId)?.first_name || 'this profile'}.`);
+                    // Ensure local state is consistent if DB says it's liked but local state isn't aware
+                    if (!likedProfileIds.has(likedProfileId)) {
+                        setLikedProfileIds(prev => {
+                            const newSet = new Set(prev);
+                            newSet.add(likedProfileId);
+                            return newSet;
+                        });
+                    }
                 } else {
                     throw new Error(`Failed to insert like: ${insertError.message} (Code: ${insertError.code})`);
                 }
             } else {
                 Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
-                // TODO: Consider creating a notification for the liked user here
+                // ADDED: Update local state to reflect the new like
+                setLikedProfileIds(prev => {
+                    const newSet = new Set(prev);
+                    newSet.add(likedProfileId);
+                    return newSet;
+                });
             }
         } catch (err: any) {
             console.error("Error in handleLikeProfile:", err);
             Alert.alert("Error Liking Profile", err.message || "Could not record like. Please try again.");
         }
-    }, [user, profiles]);
+    }, [user, profiles, likedProfileIds]); // ADDED: likedProfileIds to dependency array
 
     const headerDynamicStyle = {
         paddingTop: insets.top + styles.headerContainer.paddingVertical,
@@ -240,25 +283,26 @@ export default function ProfileBrowseScreen() {
         );
     }
 
-    if (loading) {
+    // Combined loading state for profiles (initial load)
+    if (loading && profiles.length === 0 && !error) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <ActivityIndicator size="large" color="#FF6347" />
-                    <Text style={styles.loadingText}>
-                        {profiles.length === 0 && !error ? 'Finding profiles...' : 'Processing...'}
-                    </Text>
+                    <Text style={styles.loadingText}>Finding profiles...</Text>
                 </View>
             </SafeAreaView>
         );
     }
-
+    
     if (error) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
                 <View style={styles.centeredMessageContainer}>
                     <Text style={styles.errorText}>{error}</Text>
-                    <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Try Again</Text></Pressable>
+                    <Pressable onPress={() => { fetchProfiles(); fetchLikedProfiles();}} style={styles.button}> 
+                        <Text style={styles.buttonText}>Try Again</Text>
+                    </Pressable>
                 </View>
             </SafeAreaView>
         );
@@ -282,7 +326,9 @@ export default function ProfileBrowseScreen() {
                 </View>
                 <View style={styles.centeredMessageContainerOnGradient}>
                     <Text style={styles.infoText}>No other profiles found yet. Check back soon!</Text>
-                    <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
+                    <Pressable onPress={() => { fetchProfiles(); fetchLikedProfiles();}} style={styles.button}>
+                        <Text style={styles.buttonText}>Refresh</Text>
+                    </Pressable>
                 </View>
             </LinearGradient>
         );
@@ -290,9 +336,9 @@ export default function ProfileBrowseScreen() {
 
     const currentProfile = profiles[currentIndex];
 
-    if (!currentProfile && !loading) {
+    if (!currentProfile && !loading) { // If profiles array is populated but currentProfile is somehow undefined
         return (
-            <LinearGradient
+             <LinearGradient
                 colors={['#fe9494', '#00008b']}
                 start={{ x: 0, y: 0.5 }}
                 end={{ x: 1, y: 0.5 }}
@@ -308,11 +354,14 @@ export default function ProfileBrowseScreen() {
                 </View>
                 <View style={styles.centeredMessageContainerOnGradient}>
                     <Text style={styles.infoText}>No profile to display.</Text>
-                    <Pressable onPress={fetchProfiles} style={styles.button}><Text style={styles.buttonText}>Refresh</Text></Pressable>
+                     <Pressable onPress={() => { fetchProfiles(); fetchLikedProfiles();}} style={styles.button}>
+                        <Text style={styles.buttonText}>Refresh</Text>
+                    </Pressable>
                 </View>
             </LinearGradient>
         );
     }
+
 
     return (
         <LinearGradient
@@ -330,16 +379,22 @@ export default function ProfileBrowseScreen() {
                 </Pressable>
             </View>
 
-            {/* MODIFIED: Added a container View for the ProfileCard */}
             <View style={styles.profileCardContainer}>
-                {currentProfile && (
+                {currentProfile ? ( // Ensure currentProfile exists before rendering
                     <ProfileCard
                         profile={currentProfile}
                         onLike={handleLikeProfile}
                         isVisible={true}
                         onRequestNextProfile={goToNextProfile}
                         onRequestPrevProfile={goToPrevProfile}
+                        // MODIFIED: Pass the isLiked prop
+                        isLiked={likedProfileIds.has(currentProfile.id)}
                     />
+                ) : (
+                    // Fallback if currentProfile is somehow null/undefined despite checks
+                    // This also handles the case where profiles are loading but not yet available.
+                    // You might want a more specific loading indicator here if profiles are still fetching.
+                    loading && <View style={styles.centeredMessageContainer}><ActivityIndicator size="large" color="#FFFFFF" /></View>
                 )}
             </View>
 
@@ -371,9 +426,9 @@ const styles = StyleSheet.create({
         justifyContent: 'space-between',
         alignItems: 'center',
         paddingHorizontal: 15,
-        paddingVertical: -26, // This seems unusual, typically padding is positive
+        paddingVertical: -26, 
         minHeight: 100,
-        zIndex: 20, // Ensure header is above profileCardContainer shadow if they overlap
+        zIndex: 20, 
     },
     headerButton: {
         paddingVertical: 8,
@@ -391,15 +446,13 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 1,
     },
-    // ADDED: Container for the ProfileCard
     profileCardContainer: {
-        flex: 1, // Allows the card to take up available vertical space
-        marginHorizontal: 20, // Horizontal spacing from screen edges
-        marginTop: 15,        // Space below header/progress bars area
-        marginBottom: 25,     // Space from bottom of screen
-        borderRadius: 20,     // Rounded corners
-        overflow: 'hidden',   // Clips ProfileCard content to rounded corners
-        // Adding a subtle shadow for depth (optional, adjust as needed)
+        flex: 1, 
+        marginHorizontal: 20, 
+        marginTop: 15,        
+        marginBottom: 25,     
+        borderRadius: 20,     
+        overflow: 'hidden',   
         shadowColor: "#000",
         shadowOffset: {
             width: 0,
@@ -407,11 +460,11 @@ const styles = StyleSheet.create({
         },
         shadowOpacity: 0.15,
         shadowRadius: 3.84,
-        elevation: 5, // For Android shadow
+        elevation: 5, 
     },
     safeAreaSolidBackground: {
         flex: 1,
-        backgroundColor: '#1c1c1e', // Or your app's default background
+        backgroundColor: '#1c1c1e', 
     },
     centeredMessageContainer: {
         flex: 1,
@@ -437,7 +490,7 @@ const styles = StyleSheet.create({
         fontSize: 16,
         marginBottom: 20,
     },
-    infoText: { // For messages on gradient background
+    infoText: { 
         textAlign: 'center',
         fontSize: 16,
         color: 'white', 
@@ -447,10 +500,10 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 1 },
         textShadowRadius: 2,
     },
-    infoTextRedirecting: { // For messages on solid background (like redirecting)
+    infoTextRedirecting: { 
         textAlign: 'center',
         fontSize: 16,
-        color: '#f0f0f0', // Ensure contrast with safeAreaSolidBackground
+        color: '#f0f0f0', 
         paddingHorizontal: 20,
         marginBottom: 10,
     },
@@ -476,14 +529,13 @@ const styles = StyleSheet.create({
         top: 0,
         left: 0,
         right: 0,
-        zIndex: 10, // Ensures progress bars are visible above other content if needed, but below header
+        zIndex: 10, 
     },
     progressBarsContainer: {
         flexDirection: 'row',
         height: 4,
         marginHorizontal: 10,
         gap: 4,
-        // marginTop calculation remains, positions bars near top of screen
         marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35,
     },
     progressBarSegment: {
