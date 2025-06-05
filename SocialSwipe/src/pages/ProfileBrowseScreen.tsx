@@ -55,7 +55,6 @@ export default function ProfileBrowseScreen() {
     const [currentIndex, setCurrentIndex] = useState(0);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    // ADDED: State to store IDs of liked profiles
     const [likedProfileIds, setLikedProfileIds] = useState<Set<string>>(new Set());
 
     const handleLogout = async () => {
@@ -166,9 +165,8 @@ export default function ProfileBrowseScreen() {
         } finally {
             setLoading(false);
         }
-    }, [user, getPublicImageUrl]);
+    }, [user, getPublicImageUrl, supabase]);
 
-    // ADDED: Function to fetch liked profile IDs for the current user
     const fetchLikedProfiles = useCallback(async () => {
         if (!user) return;
         try {
@@ -184,26 +182,24 @@ export default function ProfileBrowseScreen() {
             }
         } catch (err: any) {
             console.error("Error fetching liked profiles:", err.message);
-            // Not setting general error/loading for this, as it's a background update
         }
-    }, [user]);
+    }, [user, supabase]);
 
 
     useEffect(() => {
         if (!isLoadingSupabase) {
             if (user) {
                 fetchProfiles();
-                fetchLikedProfiles(); // ADDED: Fetch liked profiles when user is available
+                fetchLikedProfiles();
             } else {
-                // Clear data on logout
                 setProfiles([]);
                 setCurrentIndex(0);
                 setError(null);
                 setLoading(false);
-                setLikedProfileIds(new Set()); // ADDED: Clear liked profiles
+                setLikedProfileIds(new Set());
             }
         }
-    }, [user, isLoadingSupabase, fetchProfiles, fetchLikedProfiles]); // ADDED: fetchLikedProfiles to dependency array
+    }, [user, isLoadingSupabase, fetchProfiles, fetchLikedProfiles]);
 
     const goToNextProfile = useCallback(() => setCurrentIndex(prev => Math.min(prev + 1, profiles.length - 1)), [profiles.length]);
     const goToPrevProfile = useCallback(() => setCurrentIndex(prev => Math.max(prev - 1, 0)), []);
@@ -216,7 +212,6 @@ export default function ProfileBrowseScreen() {
         try {
             const likerUserId = user.id;
 
-            // Optional: Check if already liked locally to prevent redundant DB call if UI is primary driver
             if (likedProfileIds.has(likedProfileId)) {
                 Alert.alert("Already Liked", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'This profile'} is already in your liked list.`);
                 return;
@@ -226,9 +221,8 @@ export default function ProfileBrowseScreen() {
             const { error: insertError } = await supabase.from('likes').insert([likeData]);
 
             if (insertError) {
-                if (insertError.code === '23505') { // Unique violation (already liked in DB)
+                if (insertError.code === '23505') { 
                     Alert.alert("Already Liked", `You've already liked ${profiles.find(p => p.id === likedProfileId)?.first_name || 'this profile'}.`);
-                    // Ensure local state is consistent if DB says it's liked but local state isn't aware
                     if (!likedProfileIds.has(likedProfileId)) {
                         setLikedProfileIds(prev => {
                             const newSet = new Set(prev);
@@ -241,7 +235,6 @@ export default function ProfileBrowseScreen() {
                 }
             } else {
                 Alert.alert("Liked!", `${profiles.find(p => p.id === likedProfileId)?.first_name || 'Profile'} has been liked.`);
-                // ADDED: Update local state to reflect the new like
                 setLikedProfileIds(prev => {
                     const newSet = new Set(prev);
                     newSet.add(likedProfileId);
@@ -252,7 +245,38 @@ export default function ProfileBrowseScreen() {
             console.error("Error in handleLikeProfile:", err);
             Alert.alert("Error Liking Profile", err.message || "Could not record like. Please try again.");
         }
-    }, [user, profiles, likedProfileIds]); // ADDED: likedProfileIds to dependency array
+    }, [user, profiles, likedProfileIds, supabase]);
+
+    const handleUnlikeProfile = useCallback(async (unlikedProfileId: string) => {
+        if (!user) {
+            Alert.alert("Login Required", "Please log in to unlike profiles.");
+            return;
+        }
+        try {
+            const likerUserId = user.id;
+
+            const { error: deleteError } = await supabase
+                .from('likes')
+                .delete()
+                .match({ liker_user_id: likerUserId, liked_user_id: unlikedProfileId });
+
+            if (deleteError) {
+                throw new Error(`Failed to unlike profile: ${deleteError.message} (Code: ${deleteError.code})`);
+            } else {
+                const profileName = profiles.find(p => p.id === unlikedProfileId)?.first_name || 'Profile';
+                Alert.alert("Unliked!", `${profileName} has been unliked.`);
+                setLikedProfileIds(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(unlikedProfileId);
+                    return newSet;
+                });
+            }
+        } catch (err: any) {
+            console.error("Error in handleUnlikeProfile:", err);
+            Alert.alert("Error Unliking Profile", err.message || "Could not record unlike. Please try again.");
+        }
+    }, [user, profiles, likedProfileIds, supabase]);
+
 
     const headerDynamicStyle = {
         paddingTop: insets.top + styles.headerContainer.paddingVertical,
@@ -283,7 +307,6 @@ export default function ProfileBrowseScreen() {
         );
     }
 
-    // Combined loading state for profiles (initial load)
     if (loading && profiles.length === 0 && !error) {
         return (
             <SafeAreaView style={styles.safeAreaSolidBackground}>
@@ -336,7 +359,7 @@ export default function ProfileBrowseScreen() {
 
     const currentProfile = profiles[currentIndex];
 
-    if (!currentProfile && !loading) { // If profiles array is populated but currentProfile is somehow undefined
+    if (!currentProfile && !loading) { 
         return (
              <LinearGradient
                 colors={['#fe9494', '#00008b']}
@@ -380,20 +403,17 @@ export default function ProfileBrowseScreen() {
             </View>
 
             <View style={styles.profileCardContainer}>
-                {currentProfile ? ( // Ensure currentProfile exists before rendering
+                {currentProfile ? ( 
                     <ProfileCard
                         profile={currentProfile}
                         onLike={handleLikeProfile}
+                        onUnlike={handleUnlikeProfile} 
                         isVisible={true}
                         onRequestNextProfile={goToNextProfile}
                         onRequestPrevProfile={goToPrevProfile}
-                        // MODIFIED: Pass the isLiked prop
                         isLiked={likedProfileIds.has(currentProfile.id)}
                     />
                 ) : (
-                    // Fallback if currentProfile is somehow null/undefined despite checks
-                    // This also handles the case where profiles are loading but not yet available.
-                    // You might want a more specific loading indicator here if profiles are still fetching.
                     loading && <View style={styles.centeredMessageContainer}><ActivityIndicator size="large" color="#FFFFFF" /></View>
                 )}
             </View>
@@ -450,9 +470,9 @@ const styles = StyleSheet.create({
         flex: 1, 
         marginHorizontal: 20, 
         marginTop: 15,        
-        marginBottom: 25,     
-        borderRadius: 20,     
-        overflow: 'hidden',   
+        marginBottom: 25,    
+        borderRadius: 20,    
+        overflow: 'hidden',  
         shadowColor: "#000",
         shadowOffset: {
             width: 0,
@@ -526,7 +546,7 @@ const styles = StyleSheet.create({
     },
     progressSafeArea: {
         position: 'absolute',
-        top: 0,
+        top: -55,
         left: 0,
         right: 0,
         zIndex: 10, 
@@ -536,7 +556,7 @@ const styles = StyleSheet.create({
         height: 4,
         marginHorizontal: 10,
         gap: 4,
-        marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35,
+        marginTop: (Platform.OS === 'ios' ? 44 : 56) + 10 + 35, // Adjusted for potential header overlap
     },
     progressBarSegment: {
         flex: 1,

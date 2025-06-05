@@ -5,8 +5,8 @@ import {
     Text,
     StyleSheet,
     ImageBackground,
-    // Dimensions, // No longer directly used for screenWidth/Height here
     Platform,
+    Pressable, // ADDED Pressable
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { TapGestureHandler, State, FlingGestureHandler, Directions, FlingGestureHandlerStateChangeEvent } from 'react-native-gesture-handler';
@@ -36,6 +36,7 @@ export interface Profile {
 interface ProfileCardProps {
     profile: Profile;
     onLike: (profileId: string) => void;
+    onUnlike: (profileId: string) => void; // ADDED onUnlike prop
     onRequestNextProfile: () => void;
     onRequestPrevProfile: () => void;
     isVisible: boolean;
@@ -68,6 +69,7 @@ const interestColors: { [key: string]: string[] } = {
 const ProfileCard: React.FC<ProfileCardProps> = ({
     profile,
     onLike,
+    onUnlike, // Destructure onUnlike
     onRequestNextProfile,
     onRequestPrevProfile,
     isVisible,
@@ -78,7 +80,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
     useEffect(() => {
-        // Reset to the first image when the profile ID changes
         setCurrentImageIndex(0);
     }, [profile.id]);
 
@@ -108,10 +109,25 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const onDoubleTapEvent = useCallback((event: any) => {
         if (event.nativeEvent.state === State.ACTIVE) {
-            onLike(profile.id); // This function call should trigger an update in the parent's state, which then updates the `isLiked` prop for this card.
-            triggerLikeAnimation();
+            if (!isLiked) { // Only call onLike if not already liked, to prevent redundant calls / alerts from handleLikeProfile
+                onLike(profile.id);
+            } // If already liked, double tap does nothing to avoid conflict with single tap unlike
+            triggerLikeAnimation(); // Show animation regardless as it's a double-tap feedback
         }
-    }, [profile.id, onLike, triggerLikeAnimation]);
+    }, [profile.id, onLike, isLiked, triggerLikeAnimation]);
+
+
+    // NEW: Handler for single tap on the heart icon
+    const handleHeartIconTap = useCallback(() => {
+        if (isLiked) {
+            onUnlike(profile.id);
+        } else {
+            onLike(profile.id);
+            // The big `triggerLikeAnimation` is tied to the double tap.
+            // The change of the heart icon itself will be the primary feedback here.
+        }
+    }, [isLiked, profile.id, onLike, onUnlike]);
+
 
     const goToPrevImage = useCallback(() => {
         setCurrentImageIndex(prev => Math.max(0, prev - 1));
@@ -146,7 +162,6 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
 
     const CardContents = () => (
         <>
-            {/* Image Progress Indicator */}
             {profile.profile_pictures && profile.profile_pictures.length > 1 && (
                 <View style={styles.imageProgressContainer}>
                     {profile.profile_pictures.map((_, index) => (
@@ -234,13 +249,15 @@ const ProfileCard: React.FC<ProfileCardProps> = ({
                     </View>
                 )}
 
-                {/* Static Heart Icon for Like Status */}
+                {/* MODIFIED: Static Heart Icon now wrapped with Pressable */}
                 <View style={styles.staticHeartIconContainer}>
-                    <Icon
-                        name={isLiked ? "heart" : "heart-outline"}
-                        size={32} // UPDATED: Increased icon size
-                        color={isLiked ? "#FF5C8D" : "#FFFFFF"} 
-                    />
+                    <Pressable onPress={handleHeartIconTap} hitSlop={10}> {/* Added Pressable and hitSlop */}
+                        <Icon
+                            name={isLiked ? "heart" : "heart-outline"}
+                            size={32}
+                            color={isLiked ? "#FF5C8D" : "#FFFFFF"} 
+                        />
+                    </Pressable>
                 </View>
             </View>
         </>
@@ -326,7 +343,7 @@ const styles = StyleSheet.create({
         height: 8, 
         gap: 5,    
         justifyContent: 'center', 
-        alignItems: 'center',     
+        alignItems: 'center',    
     },
     imageProgressSegment: { 
         width: 8,  
@@ -443,10 +460,11 @@ const styles = StyleSheet.create({
         textShadowOffset: { width: 0, height: 2 },
         textShadowRadius: 6,
     },
-    staticHeartIconContainer: {
+    staticHeartIconContainer: { // This style is for the positioning View
         position: 'absolute',
         bottom: Platform.OS === 'ios' ? 30 : 20, 
         right: 16, 
+        // zIndex: 5, // Ensure it's tappable if other elements overlap, adjust as needed
     },
 });
 
