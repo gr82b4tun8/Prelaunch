@@ -19,6 +19,7 @@ import navImage from '../assets/nav.png'; // Assuming this path is correct relat
 import logoImage from '../assets/logo.png'; // ** ADDED: Import for the logo image **
 import eventSceneImage from '../assets/eventScene.png'; // ** ADDED: Import for the event scene image **
 import locationRequestImage from '../assets/locationrequest.png'; // ** ADDED: Import for the location request image **
+import venueImage from '../assets/venue.png'; // ** ADDED: Import for the venue image **
 
 // Get screen dimensions
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -64,17 +65,14 @@ const slides: WelcomeSlideType[] = [
     width: SCREEN_WIDTH * 0.87, // Width for the event scene image
     height: SCREEN_HEIGHT * 0.4, // Height for the event scene image
   },
-  {
+  { // ** MODIFIED: This slide now uses the venueImage **
     key: '2',
     title: 'Find Your Vibe, Find Your People',
     description:
       `Swipe through exciting local venues and events in ${APP_NAME}. Mark your interest, then discover other awesome people planning to be there!`,
-    imagePlaceholder: {
-      text: 'Venue Discovery UI',
-      width: SCREEN_WIDTH * 0.8,
-      height: SCREEN_HEIGHT * 0.3,
-      backgroundColor: '#ADD8E6', // Light Blue
-    },
+    image: venueImage, // Use the imported venue image
+    width: SCREEN_WIDTH * .811, // Width from the original placeholder
+    height: SCREEN_HEIGHT * 0.63, // Height from the original placeholder
   },
   {
     key: '3',
@@ -201,8 +199,8 @@ const WelcomeScreen: React.FC<WelcomeScreenProps> = ({ navigation }) => {
                   <View style={[
                     styles.roundedImageWrapper, // Apply wrapper style for rounding and overflow
                     {
-                      width: slide.width,     // Dynamic width for the wrapper
-                      height: slide.height,   // Dynamic height for the wrapper
+                      width: slide.width, // Dynamic width for the wrapper
+                      height: slide.height, // Dynamic height for the wrapper
                     }
                   ]}>
                     <Image
