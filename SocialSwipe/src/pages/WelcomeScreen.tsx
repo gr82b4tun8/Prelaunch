@@ -20,6 +20,7 @@ import logoImage from '../assets/logo.png'; // ** ADDED: Import for the logo ima
 import eventSceneImage from '../assets/eventScene.png'; // ** ADDED: Import for the event scene image **
 import locationRequestImage from '../assets/locationrequest.png'; // ** ADDED: Import for the location request image **
 import venueImage from '../assets/venue.png'; // ** ADDED: Import for the venue image **
+import profileImage from '../assets/profile.png'; // ** ADDED: Import for the profile image **
 
 // Get screen dimensions
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
@@ -74,17 +75,14 @@ const slides: WelcomeSlideType[] = [
     width: SCREEN_WIDTH * .811, // Width from the original placeholder
     height: SCREEN_HEIGHT * 0.63, // Height from the original placeholder
   },
-  {
+  { // ** MODIFIED: This slide now uses the profileImage **
     key: '3',
-    title: 'Instant Connections, Real Potential',
+    title: 'Real Connections, Real Potential',
     description:
       "See someone interesting? Double-tap to send a 'Like'. The best part? You'll always see who's liked you – no more guessing games or paywalls!",
-    imagePlaceholder: {
-      text: 'Match Notification / Like UI',
-      width: SCREEN_WIDTH * 0.8,
-      height: SCREEN_HEIGHT * 0.3,
-      backgroundColor: '#90EE90', // Light Green
-    },
+    image: profileImage, // Use the imported profile image
+    width: SCREEN_WIDTH * 0.71, // Width from the original placeholder
+    height: SCREEN_HEIGHT * 0.579, // Height from the original placeholder
   },
   { // This slide uses an actual image
     key: '4',
