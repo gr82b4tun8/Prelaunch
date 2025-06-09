@@ -12,14 +12,18 @@ import * as z from 'zod';
 import { useNavigation } from '@react-navigation/native';
 import { supabase } from '@/lib/supabaseClient';
 import { v4 as uuidv4 } from 'uuid';
+import 'react-native-get-random-values'; // Correct import for uuid
 import * as ImagePicker from 'expo-image-picker';
 import { Picker } from '@react-native-picker/picker';
 import Toast from 'react-native-toast-message';
-import { format } from 'date-fns'; // parse was imported by user but not used in the snippet provided
+import { format } from 'date-fns';
 import DateTimePicker, { DateTimePickerEvent } from '@react-native-community/datetimepicker';
 
 import { RootStackParamList } from '../../App'; // Adjust path as needed
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+
+// --- Constant for Max Photos (from EditProfileScreen) ---
+const MAX_PROFILE_PHOTOS = 6;
 
 // --- Schema and Types (Assuming definition exists elsewhere) ---
 const profileSchema = z.object({
@@ -165,14 +169,25 @@ const CreateProfile: React.FC = () => {
                 return;
             }
         }
+        if (profileImages.length >= MAX_PROFILE_PHOTOS) {
+            Toast.show({ type: 'info', text1: 'Limit Reached', text2: `Max ${MAX_PROFILE_PHOTOS} photos allowed.` });
+            return;
+        }
+
         try {
+            const selectionLimit = MAX_PROFILE_PHOTOS - profileImages.length;
             let result = await ImagePicker.launchImageLibraryAsync({
-                mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [4, 3], quality: 0.8,
-                allowsMultipleSelection: true, selectionLimit: 6 - profileImages.length,
+                mediaTypes: ImagePicker.MediaTypeOptions.Images,
+                // allowsEditing: true, // This is incompatible with allowsMultipleSelection on iOS
+                aspect: [4, 3],
+                quality: 0.8,
+                allowsMultipleSelection: true,
+                selectionLimit: selectionLimit > 0 ? selectionLimit : 1,
             });
+
             if (!result.canceled && result.assets) {
                 const newImages = result.assets.filter(newAsset => !profileImages.some(existingAsset => existingAsset.uri === newAsset.uri));
-                const combinedImages = [...profileImages, ...newImages].slice(0, 6);
+                const combinedImages = [...profileImages, ...newImages].slice(0, MAX_PROFILE_PHOTOS);
                 setProfileImages(combinedImages);
             }
         } catch (error) {
@@ -202,73 +217,110 @@ const CreateProfile: React.FC = () => {
     };
 
     const onSubmit = async (values: ProfileFormData) => {
-        if (!values.dob || !(values.dob instanceof Date) || isNaN(values.dob.getTime())) {
-            Toast.show({ type: 'error', text1: 'Invalid Date', text2: 'Please select a valid date of birth.' });
-            setIsSubmitting(false); return;
-        }
-        const today = new Date(); const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
-        if (values.dob > eighteenYearsAgo) {
-            Toast.show({ type: 'error', text1: 'Age Restriction', text2: 'You must be at least 18 years old to create a profile.' });
-            setIsSubmitting(false); return;
-        }
         if (!userId) {
             Toast.show({ type: 'error', text1: 'User Error', text2: 'User ID not found. Cannot submit.' });
-            setIsSubmitting(false); return;
+            return;
         }
         if (profileImages.length === 0) {
             Toast.show({ type: 'error', text1: 'Image Required', text2: 'Please upload at least one profile picture.' });
-            setIsSubmitting(false); return;
+            return;
+        }
+        if (!values.dob || !(values.dob instanceof Date) || isNaN(values.dob.getTime())) {
+            Toast.show({ type: 'error', text1: 'Invalid Date', text2: 'Please select a valid date of birth.' });
+            return;
+        }
+        const today = new Date(); const eighteenYearsAgo = new Date(today.getFullYear() - 18, today.getMonth(), today.getDate());
+        if (values.dob > eighteenYearsAgo) {
+            Toast.show({ type: 'error', text1: 'Age Restriction', text2: 'You must be at least 18 years old.' });
+            return;
         }
         if (values.gender === SELECT_GENDER_PLACEHOLDER) {
             Toast.show({ type: 'error', text1: 'Gender Required', text2: 'Please select your gender.' });
-            setIsSubmitting(false); return;
+            return;
         }
-        const actualLookingFor = values.lookingFor === SELECT_LOOKINGFOR_PLACEHOLDER ? null : values.lookingFor;
-
+        
         setIsSubmitting(true);
-        let uploadedImagePaths: string[] = [];
+        const uploadedImageUrls: string[] = [];
         try {
             Toast.show({ type: 'info', text1: 'Uploading images...' });
-            for (const imageAsset of profileImages) {
-                const uri = imageAsset.uri;
-                if (uri.includes('supabase.co/storage')) {
-                    const urlParts = uri.split('/profile_pictures/');
-                    if (urlParts.length > 1) {
-                        uploadedImagePaths.push(urlParts[1]);
-                        continue;
-                    }
-                }
+
+            for (const asset of profileImages) {
+                const uri = asset.uri;
                 const response = await fetch(uri);
-                const blob = await response.blob();
-                const fileExt = imageAsset.mimeType?.split('/')[1] || uri.split('.').pop() || 'jpg';
+                if (!response.ok) throw new Error(`Failed to fetch image URI (${response.status})`);
+                
+                const arrayBuffer = await response.arrayBuffer();
+                if (arrayBuffer.byteLength === 0) throw new Error("Cannot upload empty image file.");
+
+                const contentType = response.headers.get('content-type') ?? asset.mimeType ?? 'application/octet-stream';
+                const fileExtFromAsset = asset.fileName?.split('.').pop()?.toLowerCase();
+                const fileExtFromUri = uri.split('.').pop()?.toLowerCase()?.split('?')[0];
+                const fileExtFromMime = contentType.split('/')[1]?.split('+')[0];
+                const fileExt = fileExtFromAsset || fileExtFromMime || fileExtFromUri || 'jpg';
                 const fileName = `${uuidv4()}.${fileExt}`;
                 const filePath = `${userId}/${fileName}`;
-                const { error: uploadError } = await supabase.storage.from('profile_pictures').upload(filePath, blob, { contentType: blob.type || `image/${fileExt}`, upsert: false });
+
+                const { error: uploadError } = await supabase.storage
+                    .from('profile_pictures')
+                    .upload(filePath, arrayBuffer, { contentType, upsert: false });
+
                 if (uploadError) throw new Error(`Upload failed for ${fileName}: ${uploadError.message}`);
-                uploadedImagePaths.push(filePath);
+                
+                const { data: urlData } = supabase.storage.from('profile_pictures').getPublicUrl(filePath);
+                
+                if (!urlData?.publicUrl) {
+                    Toast.show({ type: 'warning', text1: 'URL Issue', text2: `Could not get public URL for ${fileName}.`});
+                } else {
+                    uploadedImageUrls.push(urlData.publicUrl);
+                }
             }
-            Toast.show({ type: 'success', text1: 'Images uploaded!' });
+
+            if (uploadedImageUrls.length < profileImages.length) {
+                 Toast.show({ type: 'warning', text1: "Some images failed", text2: "Not all images could be processed." });
+            } else {
+                Toast.show({ type: 'success', text1: 'Images uploaded!' });
+            }
+
+            const actualLookingFor = values.lookingFor === SELECT_LOOKINGFOR_PLACEHOLDER ? null : values.lookingFor;
             const profileData = {
-                user_id: userId, first_name: values.firstName, last_name: values.lastName || null,
-                date_of_birth: format(values.dob, 'yyyy-MM-dd'), gender: values.gender, bio: values.bio || null,
-                interests: interests.length > 0 ? interests : null, location: values.location || null,
-                looking_for: actualLookingFor, profile_pictures: uploadedImagePaths.length > 0 ? uploadedImagePaths : null,
-                updated_at: new Date().toISOString(), is_profile_complete: true,
+                user_id: userId,
+                first_name: values.firstName,
+                last_name: values.lastName || null,
+                date_of_birth: format(values.dob, 'yyyy-MM-dd'),
+                gender: values.gender,
+                bio: values.bio || null,
+                interests: interests.length > 0 ? interests : null,
+                location: values.location || null,
+                looking_for: actualLookingFor,
+                profile_pictures: uploadedImageUrls.length > 0 ? uploadedImageUrls : null,
+                updated_at: new Date().toISOString(),
+                is_profile_complete: true,
             };
+            
             console.log("Attempting to save profile data to individual_profiles:", profileData);
             Toast.show({ type: 'info', text1: 'Saving profile...' });
+            
             const { error: upsertError } = await supabase.from('individual_profiles').upsert(profileData, { onConflict: 'user_id' });
-            if (upsertError) { console.error("Upsert error details:", upsertError); throw upsertError; }
+            if (upsertError) {
+                console.error("Upsert error details:", upsertError);
+                throw upsertError;
+            }
+            
             Toast.show({ type: 'success', text1: 'Profile Created!', text2: 'Your profile is set up.' });
             reset({ firstName: '', lastName: '', dob: undefined, gender: SELECT_GENDER_PLACEHOLDER, bio: '', location: '', lookingFor: SELECT_LOOKINGFOR_PLACEHOLDER, });
-            setInterests([]); setProfileImages([]); setInterestInput('');
+            setInterests([]);
+            setProfileImages([]);
+            setInterestInput('');
             console.log("[CreateProfile onSubmit] Profile saved. App.tsx should detect is_profile_complete=true and handle redirection.");
+            
         } catch (error: any) {
             console.error('Create Profile Error:', error);
             let errorMessage = 'An unexpected error occurred.';
             if (error instanceof z.ZodError) {
                 errorMessage = Object.values(error.flatten().fieldErrors).flat().join('. ');
-            } else if (error.message) { errorMessage = error.message; }
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
             Toast.show({ type: 'error', text1: 'Error Creating Profile', text2: errorMessage, });
         } finally {
             setIsSubmitting(false);
@@ -396,9 +448,9 @@ const CreateProfile: React.FC = () => {
                     {/* Profile Pictures Section */}
                     <LinearGradient colors={SECTION_GRADIENT_COLORS} style={styles.section}>
                         <Text style={styles.sectionTitle}>Profile Pictures *</Text>
-                        <Text style={styles.label}>Upload up to 6 photos. The first photo will be your main profile picture.</Text>
+                        <Text style={styles.label}>Upload up to {MAX_PROFILE_PHOTOS} photos. The first photo will be your main profile picture.</Text>
                         <View style={styles.imagePreviewContainer}>{profileImages.map((image) => (<View key={image.uri} style={styles.imagePreviewWrapper}><Image source={{ uri: image.uri }} style={styles.imagePreview} /><Pressable onPress={() => removeImage(image.uri)} style={styles.removeImageButton}><Text style={styles.removeImageText}>✕</Text></Pressable></View>))}</View>
-                        {profileImages.length < 6 && (<Pressable onPress={pickImage} style={styles.uploadButton}><Text style={styles.uploadButtonText}>Add Photos</Text></Pressable>)}
+                        {profileImages.length < MAX_PROFILE_PHOTOS && (<Pressable onPress={pickImage} style={[styles.uploadButton, isSubmitting && styles.disabledButton]} disabled={isSubmitting}><Text style={styles.uploadButtonText}>Add Photos</Text></Pressable>)}
                         {profileImages.length === 0 && errors.root?.message && (<Text style={styles.errorText}>{errors.root.message}</Text> )}
                     </LinearGradient>
 
@@ -441,16 +493,11 @@ const styles = StyleSheet.create({
         padding: 20,
         paddingBottom: 60
     },
-    // Original loadingContainer style (used for LinearGradient before) is now adapted.
-    // The centering and padding are handled by centeredContentSafeArea.
-    // This can be removed if not used elsewhere, or kept if its properties are distinct.
-    // For now, it's kept as per user's original StyleSheet, but not directly used in the new loading structure's LinearGradient.
     loadingContainer: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 20,
-        // Removed backgroundColor comment as LinearGradient handles visuals now
     },
     loadingText: {
         marginTop: 10,
@@ -474,7 +521,6 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.08,
         shadowRadius: 5,
         elevation: 3
-        // backgroundColor was already correctly removed for sections
     },
     sectionTitle: { fontSize: 18, fontWeight: '600', marginBottom: 20, color: '#FF6347' },
     fieldGroup: { marginBottom: 18 },
